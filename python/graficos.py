@@ -146,7 +146,16 @@ def plot_fft(simulation_file_csv=None):
 # FUNÇÃO PRINCIPAL DE PLOTAGEM
 # ============================================================
 
-def plot_graficos(simulation_file_csv=None):
+def plot_graficos(simulation_file_csv=None, motor_type=None):
+    """
+    Plota os graficos da simulacao.
+
+    motor_type: "bldc", "dc" ou None.
+        Se None, o tipo e inferido automaticamente a partir das
+        colunas presentes no CSV (presenca de "ib"/"ic" -> bldc,
+        ausencia -> dc). Passar explicitamente e recomendado quando
+        a simulacao chama esta funcao, para nao depender de heuristica.
+    """
 
     if simulation_file_csv is None:
         print("Sem arquivo CSV da simulacao")
@@ -155,6 +164,30 @@ def plot_graficos(simulation_file_csv=None):
     arq = simulation_file_csv
     pasta_saida = DEFAULT_PASTA
 
+    # ========================================================
+    # Leitura dos dados
+    # ========================================================
+
+    data = pd.read_csv(arq, sep=";")
+
+    if motor_type is None:
+        motor_type = "bldc" if {"ib", "ic"}.issubset(data.columns) else "dc"
+    motor_type = motor_type.lower()
+
+    if motor_type == "dc":
+        _plot_graficos_dc(data, pasta_saida)
+    else:
+        _plot_graficos_bldc(data, pasta_saida)
+        plot_fft(simulation_file_csv)
+
+    plt.show()
+
+
+# ============================================================
+# Graficos - motor BLDC
+# ============================================================
+
+def _plot_graficos_bldc(data, pasta_saida):
     str_time = "time"
     str_va = "Va"
     str_vb = "Vb"
@@ -173,15 +206,6 @@ def plot_graficos(simulation_file_csv=None):
     str_iqref = "iq_ref"
     str_vdref = "vd_ref"
     str_vqref = "vq_ref"
-    str_theta_e_sintetico = "theta_e_sintetico"
-    str_omega_e_cmd = "omega_e_cmd"
-    str_v_amp = "v_amp"
-
-    # ========================================================
-    # Leitura dos dados
-    # ========================================================
-
-    data = pd.read_csv(arq, sep=";")
 
     time = data[str_time]
 
@@ -261,10 +285,10 @@ def plot_graficos(simulation_file_csv=None):
         plt.tight_layout()
         plt.savefig(pasta_saida + "02_iq-id-Te.pdf")
 
-    except:
+    except Exception:
 
         # ====================================================
-        # Tempo x iabc, rpm, Te, iq, id
+        # Tempo x iabc, rpm (sem iq/id/iqref -- malha aberta, por ex.)
         # ====================================================
 
         plt.figure(figsize=DEFAULT_FIGSIZE)
@@ -284,6 +308,74 @@ def plot_graficos(simulation_file_csv=None):
         plt.tight_layout()
         plt.savefig(pasta_saida + "01_corrente-rpm.pdf")
 
-    plot_fft(simulation_file_csv)
 
-    plt.show()
+# ============================================================
+# Graficos - motor DC
+# ============================================================
+
+def _plot_graficos_dc(data, pasta_saida):
+    """
+    Graficos para o motor DC: torque, corrente, velocidade e posicao.
+    Espera as colunas geradas por dc_motor_log_data() /
+    simulation_dc_motor_malha_corrente_velocidade():
+        time;V;ia;e;Te;omega_r;theta_r;ia_ref
+    """
+    str_time = "time"
+    str_ia = "ia"
+    str_te = "Te"
+    str_omegar = "omega_r"
+    str_thetar = "theta_r"
+    str_iaref = "ia_ref"
+
+    time = data[str_time]
+    ia = data[str_ia]
+    te = data[str_te]
+    omegar = data[str_omegar]
+    thetar = data[str_thetar]
+
+    rpm = omegar * 60.0 / (2 * np.pi)
+
+    # ========================================================
+    # Tempo x corrente, torque
+    # ========================================================
+
+    plt.figure(figsize=DEFAULT_FIGSIZE)
+
+    plt.subplot(211)
+    plt.plot(time, ia, label=r"$i_a$")
+    if str_iaref in data.columns:
+        plt.plot(time, data[str_iaref], label=r"$i_{a,ref}$", ls="--")
+        plt.legend()
+    plt.ylabel("A")
+    plt.grid()
+    no_xlabel()
+
+    plt.subplot(212)
+    plt.plot(time, te)
+    plt.grid()
+    plt.ylabel("Nm")
+    plt.xlabel("s")
+
+    plt.tight_layout()
+    plt.savefig(pasta_saida + "01_dc_corrente-torque.pdf")
+
+    # ========================================================
+    # Tempo x velocidade, posicao
+    # ========================================================
+
+    plt.figure(figsize=DEFAULT_FIGSIZE)
+
+    plt.subplot(211)
+    plt.plot(time, rpm)
+    plt.ylabel("RPM")
+    plt.grid()
+    no_xlabel()
+
+    plt.subplot(212)
+    plt.plot(time, thetar)
+    plt.grid()
+    plt.ylabel("rad")
+    plt.xlabel("s")
+
+    plt.tight_layout()
+    plt.savefig(pasta_saida + "02_dc_velocidade-posicao.pdf")
