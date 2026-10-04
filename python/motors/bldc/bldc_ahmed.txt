@@ -51,10 +51,15 @@ Vdc = 350               # V - tensao do barramento CC
 # --- Controladores PI ---
 KpOmega = 0.164     # ganho proporcional - malha de velocidade
 KiOmega = 20.597     # ganho integral - malha de velocidade
+KdOmega = 0.0           # ganho derivativo - malha de velocidade
+
+KiIq    = 1947.787         # ganho integral - malha de corrente iq
 KpId    = 26.704         # ganho proporcional - malha de corrente id
 KiId    = 1947.787         # ganho integral - malha de corrente id
+
 KpIq    = 26.704         # ganho proporcional - malha de corrente iq
-KiIq    = 1947.787         # ganho integral - malha de corrente iq
+KdId    = 0.0           # ganho derivativo - malha de corrente id
+KdIq    = 0.0           # ganho derivativo - malha de corrente iq
 
 # --- Referencia de velocidade ---
 rpm=1000

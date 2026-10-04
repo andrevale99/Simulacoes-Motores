@@ -1,0 +1,53 @@
+# ==========================================================
+#   Arquivo de parametros da simulacao - MOTOR DC
+#   Uso: ./closedloop -c dc_1.txt
+#
+#   Formato: CHAVE=VALOR (tambem aceita "CHAVE VALOR")
+#   Linhas em branco ou iniciadas com '#' sao ignoradas.
+#   Prioridade: argumentos de linha de comando > este arquivo > default
+#
+#   Contem apenas os parametros usados por
+#   simulation_dc_motor_malha_corrente_velocidade(): nao inclui
+#   M, P (BLDC/trifasico), Fsw/PwmSamples (SVPWM), KpIq/KiIq/KdIq
+#   (malha iq do FOC) nem MalhaAberta -- nenhum se aplica ao motor DC.
+# ==========================================================
+
+# --- Selecao da planta ---
+motor = dc
+
+# --- Parametros do motor DC ---
+R  = 2.6            # Ohm       - resistencia de armadura
+L  = 0.006245         # H         - indutancia de armadura
+Ke = 0.31           # V/(rad/s) - constante eletrica (FCEM)
+Kt = 0.31           # N.m/A     - constante de torque
+J  = 0.0002         # kg.m^2    - momento de inercia do rotor
+B  = 1.9e-3         # N.m/(rad/s) - coeficiente de amortecimento
+Tl = 0.0            # N.m       - torque de carga inicial
+
+# --- Parametros de tempo da simulacao ---
+Ti = 0.0            # s - tempo inicial
+Tf = 0.3            # s - tempo final
+Dt = 1e-6           # s - passo de integracao explicito
+
+# --- injecao da nova carga Tl ---
+Ttl   = 0.0        # s   - tempo de injecao da nova carga
+Tlnew = 0.0         # N.m - torque da nova carga
+
+# --- Barramento CC ---
+Vdc = 24.0          # V - tensao de armadura disponivel (fonte ideal, sem SVPWM)
+
+# --- Malha de velocidade (PID, externa) ---
+KpOmega = 0.0197
+KiOmega = 0.46
+KdOmega = 0.0
+
+# --- Malha de corrente de armadura (PID, interna) ---
+KpId = 2.5
+KiId = 1040
+KdId = 0.0
+
+# --- Referencia de velocidade ---
+rpm = 150
+
+# --- Saida ---
+file = dc_closedloop_simulation.csv

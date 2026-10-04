@@ -19,15 +19,15 @@
 # ==========================================================
 
 # --- Parametros do motor ---
-R  = 0.15          # Ohm  - resistencia de armadura
-L  = 164e-6       # H    - indutancia de magnetizacao
+R  = 0.1223          # Ohm  - resistencia de armadura
+L  = 9.75e-6       # H    - indutancia de magnetizacao
 M  = 0.0            # H    - indutancia mutua
-Ke = 0.097         # V/(rad/s) - constante eletrica  
-J  = 0.0003         # kg.m^2 - momento de inercia
-B  = 0.0005         # coeficiente de amortecimento
+Ke = 0.03388         # V/(rad/s) - constante eletrica  
+J  = 7.312e-6         # kg.m^2 - momento de inercia
+B  = 7.312e-7         # coeficiente de amortecimento
 Tl = 0.0            # N.m  - torque de carga
-P  = 4             # numero de pares de polos
-Kt = 0.097         # N.m/A - constante de torque
+P  = 7             # numero de pares de polos
+Kt = 0.03388         # N.m/A - constante de torque
 
 # --- Parametros do SVPWM (chaveamento real do inversor) ---
 Fsw        = 10000   # Hz - frequencia de chaveamento
@@ -47,15 +47,21 @@ Ttl = 0.3           # s - tempo de injecao da nova carga
 Tlnew = 0.2         # N.m - Torque da nova carga
 
 # --- Barramento CC ---
-Vdc = 42.0               # V - tensao do barramento CC
+# vdc d 36 V a 44 V
+Vdc = 22.0               # V - tensao do barramento CC
 
 # --- Controladores PI ---
-KpOmega = 1.943     # ganho proporcional - malha de velocidade
-KiOmega = 244.196     # ganho integral - malha de velocidade
-KpId    = 0.515         # ganho proporcional - malha de corrente id
-KiId    = 471.239         # ganho integral - malha de corrente id
-KpIq    = 0.515         # ganho proporcional - malha de corrente iq
-KiIq    = 471.239         # ganho integral - malha de corrente iq
+KpOmega = 0.0027     # ganho proporcional - malha de velocidade
+KiOmega = 0.4807     # ganho integral - malha de velocidade
+KdOmega = 0.0           # ganho derivativo - malha de velocidade
+
+KpId    = 0.05         # ganho proporcional - malha de corrente id
+KiId    = 626.9         # ganho integral - malha de corrente id
+KdId    = 0.0           # ganho derivativo - malha de corrente id
+
+KpIq    = 0.05         # ganho proporcional - malha de corrente iq
+KiIq    = 626.9         # ganho integral - malha de corrente iq
+KdIq    = 0.0           # ganho derivativo - malha de corrente iq
 
 # --- Referencia de velocidade ---
 rpm=2000

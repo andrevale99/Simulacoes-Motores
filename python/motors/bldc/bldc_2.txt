@@ -5,30 +5,18 @@
 #   Formato: CHAVE=VALOR (tambem aceita "CHAVE VALOR")
 #   Linhas em branco ou iniciadas com '#' sao ignoradas.
 #   Prioridade: argumentos de linha de comando > este arquivo > default
-#
-# V. A. N. da R. Barros and M. R. O. A. Maximo, 
-# "BLDC Motor Control for Small Size League Robots," 
-# 2025 Brazilian Symposium on Robotics (SBR) and 2025 Workshop on Robotics in Education (WRE), 
-# Vitoria, Brazil, 2025, pp. 200-205, 
-# doi: 10.1109/SBR/WRE66973.2025.11249595. 
-# keywords: {Motor drives;PI control;Monte Carlo methods;
-# Design methodology;Force;Education;Robustness;Robots;
-# Standards;Electric motors;BLDC motor;Small Size League;
-# PI control;Feedforward control;Monte Carlo simulations},
-#
-#
 # ==========================================================
 
 # --- Parametros do motor ---
-R  = 464e-3          # Ohm  - resistencia de armadura
-L  = 322e-6       # H    - indutancia de magnetizacao
+R  = 0.053          # Ohm  - resistencia de armadura
+L  = 0.045e-3       # H    - indutancia de magnetizacao
 M  = 0.0            # H    - indutancia mutua
-Ke = 25.1e-3        # V/(rad/s) - constante eletrica  
-J  = 135e-5         # kg.m^2 - momento de inercia
-B  = 135e-6         # coeficiente de amortecimento
+Ke = 0.0682         # V/(rad/s) - constante eletrica  (7.14 V/krpm) 
+J  = 1.8e-4         # kg.m^2 - momento de inercia
+B  = 1.2e-6         # coeficiente de amortecimento
 Tl = 0.0            # N.m  - torque de carga
-P  = 8             # numero de pares de polos
-Kt = 25.1e-3         # N.m/A - constante de torque
+P  = 7             # numero de pares de polos
+Kt = 0.0682         # N.m/A - constante de torque
 
 # --- Parametros do SVPWM (chaveamento real do inversor) ---
 Fsw        = 10000   # Hz - frequencia de chaveamento
@@ -48,19 +36,24 @@ Ttl = 0.3           # s - tempo de injecao da nova carga
 Tlnew = 0.2         # N.m - Torque da nova carga
 
 # --- Barramento CC ---
-Vdc = 18.0               # V - tensao do barramento CC
+# vdc d 36 V a 44 V
+Vdc = 36.0               # V - tensao do barramento CC
 
 # --- Controladores PI ---
-KpOmega = 33.794     # ganho proporcional - malha de velocidade
-KiOmega = 4246.682     # ganho integral - malha de velocidade
-KpId    = 1.012         # ganho proporcional - malha de corrente id
-KiId    = 1457.699         # ganho integral - malha de corrente id
-KpIq    = 1.012         # ganho proporcional - malha de corrente iq
-KiIq    = 1457.699         # ganho integral - malha de corrente iq
+KpOmega = 1.658     # ganho proporcional - malha de velocidade
+KiOmega = 208.39     # ganho integral - malha de velocidade
+KdOmega = 0.0           # ganho derivativo - malha de velocidade
+
+KpId    = 0.141         # ganho proporcional - malha de corrente id
+KiId    = 166.504         # ganho integral - malha de corrente id
+KdId    = 0.0           # ganho derivativo - malha de corrente id
+
+KpIq    = 0.141         # ganho proporcional - malha de corrente iq
+KiIq    = 166.504         # ganho integral - malha de corrente iq
+KdIq    = 0.0           # ganho derivativo - malha de corrente iq
 
 # --- Referencia de velocidade ---
-# max rpm = 6720
-rpm=800
+rpm=955
 
 # --- Partida em malha aberta ---
 # --- Partida em malha aberta ---
