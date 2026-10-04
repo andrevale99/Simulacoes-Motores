@@ -1,7 +1,7 @@
 import math
 from dataclasses import dataclass, field
+from auxs import rads_to_rpm, rpm_to_rads, TWO_PI
 
-TWO_PI = 2*math.pi
 PHI_A = 0.0
 PHI_B = -2*math.pi/3
 PHI_C =  2*math.pi/3
@@ -38,12 +38,6 @@ def trapezoidal_back_emf(theta):
         return -1.0
     else:
         return 6.0*theta/math.pi - 12.0
-
-def rads_to_rpm(omega):
-    return omega*60/TWO_PI
-
-def rpm_to_rads(rpm):
-    return rpm*TWO_PI/60
 
 def bldc_step(Vabc, motor, time, Tl, trapezoidal_back_emf_flag):
     fabc = [0.0, 0.0, 0.0]
