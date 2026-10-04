@@ -37,8 +37,8 @@ Tlnew = 0.0         # N.m - torque da nova carga
 Vdc = 24.0          # V - tensao de armadura disponivel (fonte ideal, sem SVPWM)
 
 # --- Malha de velocidade (PID, externa) ---
-KpOmega = 0.0197
-KiOmega = 0.46
+KpOmega = 0.1
+KiOmega = 4.2
 KdOmega = 0.0
 
 # --- Malha de corrente de armadura (PID, interna) ---

@@ -239,3 +239,156 @@ def simulation_dc_motor_malha_corrente_velocidade(args):
     plot_graficos(args.filename, motor_type="dc")
 
     return 0
+
+def simulation_dc_motor_malha_velocidade(args):
+    """
+    Simulacao de um motor DC com controle somente de velocidade:
+
+        referencia de velocidade -> PID de velocidade -> tensao de armadura
+
+    A saida do PID de velocidade e aplicada diretamente ao motor,
+    limitada entre -Vdc e +Vdc.
+    """
+
+    motor = DCMotor(
+        R=args.R,
+        L=args.L,
+        Ke=args.Ke,
+        Kt=args.Kt,
+        J=args.J,
+        B=args.B,
+    )
+
+    if args.Dt > 0.0:
+        dt = args.Dt
+    else:
+        dt = 1e-6
+
+    time_sim = TimeSimulation(
+        t0=args.Ti,
+        tf=args.Tf,
+        dt=dt
+    )
+
+    total_steps = int(
+        (time_sim.tf - time_sim.t0) / dt + 0.5
+    ) + 1
+
+    print(f"Passo de integracao (dt)    = {dt:.9e} s")
+    print(f"Total de passos da simulacao ~ {total_steps}\n")
+
+    if total_steps > 5_000_000:
+        print(
+            f"Aviso: {total_steps} passos -- "
+            "a simulacao pode demorar bastante."
+        )
+
+    Vdc = args.Vdc
+
+    # Periodo de atualizacao do controlador de velocidade
+    dtOmega = getattr(args, "dtOmega", 1e-3)
+
+    # Ganho derivativo opcional
+    KdOmega = getattr(args, "KdOmega", 0.0)
+
+    # Referencia de velocidade
+    omega_ref = rpm_to_rads(args.rpm)
+
+    print(f"rpm_ref = {args.rpm:.2f} RPM")
+    print(f"omega_ref = {omega_ref:.6f} rad/s")
+
+    # PID de velocidade
+    # A saida agora e diretamente a tensao V
+    pi_omega = pid_controller_init(
+        args.KpOmega,
+        args.KiOmega,
+        KdOmega,
+        dtOmega,
+        True,
+        -Vdc,
+        True,
+        Vdc
+    )
+
+    t_next_omega = time_sim.t0
+
+    V_hold = 0.0
+
+    try:
+        log_file = open(args.filename, "w")
+    except OSError as e:
+        print(f"Erro ao criar o arquivo de log: {e}")
+        return 1
+
+    log_file.write(
+        "time;V;ia;e;Te;omega_r;theta_r\n"
+    )
+
+    pb = progress_bar_init(
+        time_sim.t0,
+        time_sim.tf,
+        time_sim.dt
+    )
+
+    for k in range(total_steps):
+
+        t = time_sim.t0 + k * dt
+
+        if t > time_sim.tf:
+            break
+
+        if t >= args.Ttl:
+            args.Tl = args.Tlnew
+
+        # Malha de velocidade
+        if t >= t_next_omega:
+
+            V_hold = pid_controller_update(
+                pi_omega,
+                omega_ref,
+                motor.omega_r
+            )
+
+            t_next_omega += dtOmega
+
+        # Tensao aplicada diretamente ao motor
+        V = V_hold
+
+        # Planta
+        dc_motor_step(
+            V,
+            motor,
+            dt,
+            args.Tl
+        )
+
+        progress_bar_update(pb, t)
+
+        log_file.write(
+            f"{t:.6f};"
+            f"{V:.4f};"
+            f"{motor.ia:.6f};"
+            f"{motor.e:.6f};"
+            f"{motor.Te:.6f};"
+            f"{motor.omega_r:.6f};"
+            f"{motor.theta_r:.6f}\n"
+        )
+
+    progress_bar_finish(pb)
+    log_file.close()
+
+    print(
+        f'\n\nSimulacao concluida. '
+        f'Resultados em "{args.filename}".\n'
+    )
+
+    print(
+        '\nPlot dos graficos de ia, Te, RPM, theta_r\n\n'
+    )
+
+    plot_graficos(
+        args.filename,
+        motor_type="dc"
+    )
+
+    return 0
