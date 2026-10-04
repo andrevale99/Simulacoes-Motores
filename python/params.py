@@ -7,6 +7,9 @@ import sys
 #   Defaults (usados se nao vierem nem do arquivo nem da CLI)
 # ==========================================================
 DEFAULTS = {
+    # Selecao da planta simulada
+    "motor": "bldc",
+
     # Parametros do motor
     "R": 0.161,
     "L": 0.052e-3,
@@ -34,13 +37,16 @@ DEFAULTS = {
     # Barramento CC
     "Vdc": 24.0,
 
-    # Controladores PI
+    # Controladores PID
     "KpOmega": 1066.91,
     "KiOmega": 134071.803,
+    "KdOmega": 0.0,
     "KpId": 0.163,
     "KiId": 505.796,
+    "KdId": 0.0,
     "KpIq": 0.163,
     "KiIq": 505.796,
+    "KdIq": 0.0,
 
     # Referencia de velocidade
     "rpm": 20.0,
@@ -54,15 +60,16 @@ DEFAULTS = {
 
 # Tipo esperado de cada chave (int, float, bool ou str)
 TYPES = {
+    "motor": str,
     "R": float, "L": float, "M": float, "Ke": float, "J": float, "B": float,
     "Tl": float, "P": int, "Kt": float,
     "Fsw": float, "PwmSamples": int,
     "Ti": float, "Tf": float, "Dt": float,
     "Ttl": float, "Tlnew": float,
     "Vdc": float,
-    "KpOmega": float, "KiOmega": float,
-    "KpId": float, "KiId": float,
-    "KpIq": float, "KiIq": float,
+    "KpOmega": float, "KiOmega": float, "KdOmega": float,
+    "KpId": float, "KiId": float, "KdId": float,
+    "KpIq": float, "KiIq": float, "KdIq": float,
     "rpm": float,
     "MalhaAberta": bool,
     "filename": str,
@@ -165,6 +172,10 @@ def build_arg_parser():
     parser.add_argument("-c", "--config", type=str, default=None,
                          help="Arquivo de parametros (CHAVE=VALOR)")
 
+    parser.add_argument("-m", "--motor", type=str, default=None,
+                         choices=["bldc", "dc"],
+                         help="planta a ser simulada: bldc ou dc")
+
     # Motor
     g_motor = parser.add_argument_group("Parametros do motor")
     g_motor.add_argument("-R", type=float, default=None, help="Ohm - resistencia de armadura")
@@ -200,13 +211,16 @@ def build_arg_parser():
     g_bus.add_argument("--Vdc", type=float, default=None, help="V - tensao do barramento CC")
 
     # PI
-    g_pi = parser.add_argument_group("Controladores PI")
+    g_pi = parser.add_argument_group("Controladores PID")
     g_pi.add_argument("--KpOmega", type=float, default=None, help="ganho proporcional - malha de velocidade")
     g_pi.add_argument("--KiOmega", type=float, default=None, help="ganho integral - malha de velocidade")
+    g_pi.add_argument("--KdOmega", type=float, default=None, help="ganho derivativo - malha de velocidade")
     g_pi.add_argument("--KpId", type=float, default=None, help="ganho proporcional - malha de corrente id")
     g_pi.add_argument("--KiId", type=float, default=None, help="ganho integral - malha de corrente id")
+    g_pi.add_argument("--KdId", type=float, default=None, help="ganho derivativo - malha de corrente id")
     g_pi.add_argument("--KpIq", type=float, default=None, help="ganho proporcional - malha de corrente iq")
     g_pi.add_argument("--KiIq", type=float, default=None, help="ganho integral - malha de corrente iq")
+    g_pi.add_argument("--KdIq", type=float, default=None, help="ganho derivativo - malha de corrente iq")
 
     # Referencia
     g_ref = parser.add_argument_group("Referencia de velocidade")
