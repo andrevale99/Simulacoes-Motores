@@ -65,4 +65,4 @@ rpm = 1500             # RPM (mecanico) - velocidade desejada
 MalhaAberta = 0
 
 # --- Saida ---
-file = closedloop_simulation.csv
+file = bldc_closedloop_simulation.csv

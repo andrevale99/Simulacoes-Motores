@@ -62,4 +62,4 @@ MalhaAberta = 0
 
 
 # --- Saida ---
-file = closedloop_simulation.csv
+file = bldc_closedloop_simulation.csv
