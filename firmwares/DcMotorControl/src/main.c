@@ -1,4 +1,4 @@
-#include "stm32f4xx.h"
+#include "stm32f411xe.h"
 #include "FreeRTOS.h"
 #include "task.h"
 
@@ -25,7 +25,7 @@ static void vBlinkTask(void *pvParameters)
 
     for (;;) {
         LED_PORT->ODR ^= (1U << LED_PIN);           /* alterna o LED */
-        vTaskDelay(pdMS_TO_TICKS(500));
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
 
