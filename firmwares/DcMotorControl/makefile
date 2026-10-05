@@ -10,18 +10,29 @@ CPU   = -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard
 DEFS  = -DSTM32F411xE -DHSE_VALUE=25000000U
 FREERTOS = FreeRTOS/Source
 PORT     = $(FREERTOS)/portable/GCC/ARM_CM4F
+LIB     = lib
+DRIVERS = src/drivers
+
+# diretórios que contêm .c ou .h dentro de lib/ e src/drivers/
+LIB_DIRS = $(sort $(dir $(wildcard $(LIB)/*/*.h $(LIB)/*/*.c)))
+DRV_DIRS = $(sort $(dir $(wildcard $(DRIVERS)/*/*.h $(DRIVERS)/*/*.c)))
 
 INCS  = -I$(CMSIS)/Core/Include -I$(CMSIS)/Device/ST/STM32F4xx/Include -Isrc \
-        -I$(FREERTOS)/include -I$(PORT)
+        -I$(FREERTOS)/include -I$(PORT) \
+        -I$(LIB) -I$(DRIVERS) \
+        $(addprefix -I,$(LIB_DIRS)) $(addprefix -I,$(DRV_DIRS))
 
 CFLAGS  = $(CPU) $(DEFS) $(INCS) -O2 -g3 -Wall -ffunction-sections -fdata-sections -MMD -MP
 LDFLAGS = $(CPU) -TSTM32F411XE_FLASH.ld --specs=nano.specs --specs=nosys.specs \
           -Wl,--gc-sections -Wl,-Map=$(BUILD)/$(TARGET).map
 
 SRCS = $(wildcard src/*.c) \
+       $(wildcard $(LIB)/*/*.c) \
+       $(wildcard $(DRIVERS)/*/*.c) \
        $(wildcard $(FREERTOS)/*.c) \
        $(PORT)/port.c \
        $(FREERTOS)/portable/MemMang/heap_4.c
+
 ASMS = $(wildcard src/*.s)
 
 # mantem a arvore de diretorios dentro de build/
@@ -42,8 +53,12 @@ flash: compile
 ifeq ($(FLASHER),openocd)
 	openocd -f interface/stlink.cfg -f target/stm32f4x.cfg \
 	        -c "program $(ELF) verify reset exit"
-else
+else ifeq ($(FLASHER),stlink)
 	st-flash --reset write $(BIN) 0x08000000
+else ifeq ($(FLASHER),dfu-util)
+	dfu-util -a 0 -D $(BIN) -s 0x08000000:leave
+else
+	$(error Gravador desconhecido: $(FLASHER))
 endif
 
 clean:
@@ -60,7 +75,7 @@ $(BUILD)/%.o: %.s
 
 $(ELF): $(OBJS)
 	$(CC) $(OBJS) $(LDFLAGS) -o $@
-	$(SIZE) $@
+	$(SIZE) -G -d $@
 
 $(BIN): $(ELF)
 	$(OBJCOPY) -O binary $< $@
