@@ -305,7 +305,7 @@ def simulation_dc_motor_malha_velocidade(args):
         KdOmega,
         dtOmega,
         True,
-        -Vdc,
+        0,
         True,
         Vdc
     )
