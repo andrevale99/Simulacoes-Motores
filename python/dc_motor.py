@@ -86,19 +86,81 @@ def dc_motor_log_data(motor, log_file, t, V):
 #   PASSO DE SIMULACAO
 # ----------------------------------------------------------------------
 
-def dc_motor_step(V, motor, dt, Tl):
+def dc_motor_electrical_step(V, motor, dt):
     """
-    Executa um passo de integracao do modelo do motor DC.
+    Dinamica ELETRICA do motor DC (circuito de armadura).
+
+        L * di/dt = V - R*i - e,    e = Ke * omega_r
 
     A funcao realiza, nesta ordem:
 
-      1. Calculo da FCEM:                 e = Ke * omega_r
-      2. Calculo da derivada da corrente:  di/dt = (V - R*i - e) / L
-      3. Integracao da corrente:           i += di/dt * dt
-      4. Calculo do torque eletromagnetico: Te = Kt * i
-      5. Calculo da aceleracao angular:    domega/dt = (Te - Tl - B*omega) / J
-      6. Atualizacao da velocidade mecanica
-      7. Atualizacao da posicao mecanica
+      1. Calculo da FCEM:                    e = Ke * omega_r
+      2. Calculo da derivada da corrente:     di/dt = (V - R*i - e) / L
+      3. Integracao da corrente (Euler):      i += di/dt * dt
+      4. Calculo do torque eletromagnetico:   Te = Kt * i
+
+    Entradas do dominio mecanico: omega_r (via FCEM).
+    Saidas para o dominio mecanico: Te.
+
+    Parametros
+    ----------
+    V : float
+        Tensao aplicada a armadura [V].
+    motor : DCMotor
+        Modelo do motor DC (estado atualizado in-place).
+    dt : float
+        Passo de integracao [s].
+    """
+    motor.e = motor.Ke * motor.omega_r
+
+    dia = (V - motor.R * motor.ia - motor.e) / motor.L
+    motor.ia += dia * dt
+
+    motor.Te = motor.Kt * motor.ia
+
+
+def dc_motor_mechanical_step(motor, dt, Tl):
+    """
+    Dinamica MECANICA do motor DC (eixo do rotor).
+
+        J * domega_r/dt = Te - Tl - B*omega_r
+        dtheta_r/dt     = omega_r
+
+    A funcao realiza, nesta ordem:
+
+      1. Calculo da aceleracao angular:  domega/dt = (Te - Tl - B*omega) / J
+      2. Atualizacao da velocidade mecanica (Euler)
+      3. Atualizacao da posicao mecanica
+
+    Entradas do dominio eletrico: Te (ja calculado em
+    dc_motor_electrical_step()).
+
+    Parametros
+    ----------
+    motor : DCMotor
+        Modelo do motor DC (estado atualizado in-place).
+    dt : float
+        Passo de integracao [s].
+    Tl : float
+        Torque de carga aplicado ao eixo [N.m].
+    """
+    domega_r = (motor.Te - Tl - motor.B * motor.omega_r) / motor.J
+    motor.omega_r += domega_r * dt
+    motor.theta_r += motor.omega_r * dt
+
+
+def dc_motor_step(V, motor, dt, Tl):
+    """
+    Executa um passo de integracao do modelo do motor DC, compondo
+    a dinamica eletrica e a dinamica mecanica, nesta ordem:
+
+      1. dc_motor_electrical_step():  FCEM, corrente de armadura, Te
+      2. dc_motor_mechanical_step():  velocidade e posicao do rotor
+
+    A ordem importa: o torque Te calculado no passo eletrico (com a
+    corrente ja atualizada) e a entrada do passo mecanico, e a
+    velocidade omega_r atualizada no passo mecanico alimenta a FCEM
+    do proximo passo eletrico.
 
     Parametros
     ----------
@@ -111,16 +173,8 @@ def dc_motor_step(V, motor, dt, Tl):
     Tl : float
         Torque de carga aplicado ao eixo [N.m].
     """
-    motor.e = motor.Ke * motor.omega_r
-
-    dia = (V - motor.R * motor.ia - motor.e) / motor.L
-    motor.ia += dia * dt
-
-    motor.Te = motor.Kt * motor.ia
-
-    domega_r = (motor.Te - Tl - motor.B * motor.omega_r) / motor.J
-    motor.omega_r += domega_r * dt
-    motor.theta_r += motor.omega_r * dt
+    dc_motor_electrical_step(V, motor, dt)
+    dc_motor_mechanical_step(motor, dt, Tl)
 
 
 # ----------------------------------------------------------------------
