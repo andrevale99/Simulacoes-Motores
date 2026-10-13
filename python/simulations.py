@@ -1,24 +1,20 @@
 import math
-from dataclasses import dataclass
-
-from params import get_args
+from auxs import rpm_to_rads
 from graficos import plot_graficos
+from bldc import BLDCMotor, TimeSimulation, bldc_step
+from inverter import Inverter, inverter_output_voltage,six_step_commutation
 from pid_controller import pid_controller_init, pid_controller_update
 from svpwm import svpwm_init, svpwm_modulate, svpwm_carrier, svpwm_gate_state
-from inverter import Inverter, inverter_output_voltage
 from transforms import clarke_transform, park_transform, park_inverse_transform
-from bldc import BLDCMotor, TimeSimulation, bldc_step
-from dc_motor import (
-    DCMotor,
-    dc_motor_step,
-    dc_motor_electrical_step,
-    dc_motor_mechanical_step,
-)
-from auxs import rpm_to_rads
 from progressbar import progress_bar_init, progress_bar_update, progress_bar_finish
+from dc_motor import DCMotor, dc_motor_step, dc_motor_electrical_step, dc_motor_mechanical_step
 
 # ajustar conforme os limites reais do projeto original (nao enviados)
 PI_IQ_MIN, PI_IQ_MAX = -50.0, 50.0
+
+#  =====================================================
+#  =====================================================
+#  =====================================================
 
 def simulation_bldc_malha_corrente_velocidade(args):
     motor = BLDCMotor(
@@ -61,7 +57,8 @@ def simulation_bldc_malha_corrente_velocidade(args):
     print(f"rpm_ref = {args.rpm:.2f} RPM")
     print(f"omega_ref = {omega_ref:.6f} rad/s")
 
-    pi_omega = pid_controller_init(args.KpOmega, args.KiOmega, 0.0, dtOmega, True, PI_IQ_MIN, True, PI_IQ_MAX)
+    pi_omega = pid_controller_init(args.KpOmega, args.KiOmega, 0.0, dtOmega, 
+                                   True, PI_IQ_MIN, True, PI_IQ_MAX)
     pi_d = pid_controller_init(args.KpId, args.KiId, 0.0, dtId, True, vdc_min, True, vdc_max)
     pi_q = pid_controller_init(args.KpIq, args.KiIq, 0.0, dtIq, True, vdc_min, True, vdc_max)
 
@@ -140,6 +137,106 @@ def simulation_bldc_malha_corrente_velocidade(args):
 
     return 0
 
+#  =====================================================
+#  =====================================================
+#  =====================================================
+
+def simulation_bldc_velocidade(args):
+
+    motor = BLDCMotor(
+        R=args.R, L=args.L, M=args.M, Ke=args.Ke,
+        J=args.J, B=args.B, P=args.P, Kt=args.Kt,
+    )
+
+    Ts = 1/args.Fsw
+    
+    if args.Dt > 0.0:
+        dt = args.Dt
+        if dt > Ts/2.0:
+            print(f"Aviso: Dt={dt:.6e} s e maior que metade do periodo de "
+                  f"chaveamento (Ts={Ts:.6e} s).")
+    else:
+        print("oi")
+        dt = Ts / args.PwmSamples
+
+    time_sim = TimeSimulation(t0=args.Ti, tf=args.Tf, dt=dt)
+    total_steps = int((time_sim.tf - time_sim.t0)/dt + 0.5) + 1
+
+    print(f"\nPeriodo de chaveamento (Ts) = {Ts:.9e} s")
+    print(f"Passo de integracao (dt)    = {dt:.9e} s")
+    print(f"Total de passos da simulacao ~ {total_steps}\n")
+
+    if total_steps > 5_000_000:
+        print(f"Aviso: {total_steps} passos -- a simulacao pode demorar bastante.")
+
+    inverter = Inverter(Vdc=args.Vdc)
+
+    vdc_max = args.Vdc / 2
+
+    dtOmega = 1e-3
+
+    omega_ref = rpm_to_rads(args.rpm)
+    print(f"rpm_ref = {args.rpm:.2f} RPM")
+    print(f"omega_ref = {omega_ref:.6f} rad/s")
+
+    pi_omega = pid_controller_init(10, 5, 0.0, dtOmega,
+                                    True, -vdc_max, True, vdc_max)
+
+    t_next_omega = time_sim.t0
+    v_ref = 0
+
+    try:
+        log_file = open(args.filename, "w")
+    except OSError as e:
+        print(f"Erro ao criar o arquivo de log: {e}")
+        return 1
+
+    log_file.write("time;Va;Vb;Vc;ia;ib;ic;ea;eb;ec;Te;theta_r;"
+                    "omega_r;v_ref;sector\n")
+
+    pb = progress_bar_init(time_sim.t0, time_sim.tf, time_sim.dt)
+
+    for k in range(total_steps):
+        t = time_sim.t0 + k*dt
+
+        if t > time_sim.tf:
+            break
+
+        if t >= args.Ttl:
+            args.Tl = args.Tlnew
+
+        motor.theta_e = motor.theta_r * motor.P
+
+        if t >= t_next_omega:
+            v_ref = pid_controller_update(pi_omega, omega_ref, motor.omega_r)
+            t_next_omega += dtOmega
+
+        Vabc, sector = six_step_commutation(inverter, motor.theta_e)
+
+        bldc_step(Vabc, motor, time_sim, args.Tl, True)
+
+        progress_bar_update(pb, t)
+
+        log_file.write(
+            f"{t:.6f};{Vabc[0]:.3f};{Vabc[1]:.3f};{Vabc[2]:.3f};"
+            f"{motor.iabc[0]:.4f};{motor.iabc[1]:.4f};{motor.iabc[2]:.4f};"
+            f"{motor.eabc[0]:.4f};{motor.eabc[1]:.4f};{motor.eabc[2]:.4f};"
+            f"{motor.Te:.4f};{motor.theta_r:.3f};"
+            f"{motor.omega_r:.4f};{v_ref:.4f};{sector}\n"
+        )
+
+    progress_bar_finish(pb)
+    log_file.close()
+    print(f"\n\nSimulacao concluida. Resultados em \"{args.filename}\".\n")
+
+    print(f'\nPlot dos graficos de iabc, Te, idq, RPM e fft das correntes\n\n')
+    plot_graficos(args.filename, motor_type="bldc") 
+
+    return 0
+
+#  =====================================================
+#  =====================================================
+#  =====================================================
 
 def simulation_dc_motor_malha_corrente_velocidade(args):
     """
@@ -244,6 +341,10 @@ def simulation_dc_motor_malha_corrente_velocidade(args):
     plot_graficos(args.filename, motor_type="dc")
 
     return 0
+
+#  =====================================================
+#  =====================================================
+#  =====================================================
 
 def simulation_dc_motor_malha_velocidade(args):
     """
@@ -403,3 +504,7 @@ def simulation_dc_motor_malha_velocidade(args):
     )
 
     return 0
+
+#  =====================================================
+#  =====================================================
+#  =====================================================
