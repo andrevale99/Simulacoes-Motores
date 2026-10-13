@@ -4,10 +4,17 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+#include "pid.h"
+#include "uart.h"
 #include "drv8833.h"
 #include "encoder.h"
 
-#include "uart.h"
+#define SPEED_SETPOINT_RPM  100.0f      /* velocidade desejada (eixo de saida) */
+#define SPEED_MAX_RPM       165.0f      /* limite: -165 a +165 */
+
+#define PID_KP              0.8f
+#define PID_KI              2.0f
+#define PID_KD              0.0f
 
 /* LED da Black Pill: PC13 (ativo em nivel baixo) */
 #define LED_PORT        GPIOC
@@ -17,7 +24,7 @@
 #define PWM_FREQ_HZ         10000UL
 #define PWM_DUTY            1.f       /* 60% */
 
-#define ENC_SAMPLE_MS       100U
+#define ENC_SAMPLE_MS       10U
 #define ENC_PPR             11U         /* ciclos por canal, no eixo do motor */
 #define ENC_GEAR_RATIO      33.8f
 
@@ -25,6 +32,13 @@
 
 static drv8833_t motor;
 static encoder_t enc;
+
+static pid speed_pid = {
+    .kp = PID_KP,
+    .ki = PID_KI,
+    .kd = PID_KD,
+    .saturation = SPEED_MAX_RPM,
+};
 
 /* Ultima velocidade medida (leia pelo debugger ou por outra task) */
 static volatile float g_output_rpm;
@@ -90,8 +104,22 @@ static void motor_init(void)
 
     drv8833_init(&motor, &cfg);
     drv8833_drive(&motor, DRV8833_BRIDGE_A,
-                  DRV8833_DIR_FORWARD, DRV8833_DECAY_FAST, PWM_DUTY);
+                  DRV8833_DIR_FORWARD, DRV8833_DECAY_FAST, 0.0f);
     drv8833_enable(&motor, DRV8833_STATE_ON);
+}
+
+static float clampf(float v, float lo, float hi)
+{
+    return (v < lo) ? lo : (v > hi) ? hi : v;
+}
+
+/* Aplica a saida do PID (-165..165) no motor */
+static void motor_apply(float u)
+{
+    drv8833_dir_t dir = (u >= 0.0f) ? DRV8833_DIR_FORWARD : DRV8833_DIR_REVERSE;
+    float duty = (u >= 0.0f ? u : -u) / SPEED_MAX_RPM;
+
+    drv8833_drive(&motor, DRV8833_BRIDGE_A, dir, DRV8833_DECAY_FAST, duty);
 }
 
 /* Le o CCR do canal (1..4) e converte para 0..1000 (0,1%) */
@@ -130,9 +158,13 @@ static void vEncoderTask(void *pvParameters)
 {
     (void)pvParameters;
 
-    char buf[96];
+    char buf[112];
     encoder_sample_t s;
+    const float dt = (float)ENC_SAMPLE_MS / 1000.0f;
+    const float sp = clampf(SPEED_SETPOINT_RPM, -SPEED_MAX_RPM, SPEED_MAX_RPM);
     TickType_t last = xTaskGetTickCount();
+
+    pid_clear(&speed_pid);
 
     for (;;) {
         vTaskDelayUntil(&last, pdMS_TO_TICKS(ENC_SAMPLE_MS));
@@ -141,18 +173,26 @@ static void vEncoderTask(void *pvParameters)
         if (encoder_get_sample(&enc, &s) != ENCODER_OK)
             continue;
 
-        /* RPM do motor com 1 casa decimal, tratando o sinal */
+        /* Controle de velocidade */
+        if (pid_control(&speed_pid, sp, s.output_rpm, dt) == PID_OK)
+            motor_apply(speed_pid.output);
+
+        /* Log */
         int32_t rpm10 = (int32_t)(s.output_rpm * 10.0f);
         const char *sign = (rpm10 < 0) ? "-" : "";
         if (rpm10 < 0) rpm10 = -rpm10;
+
+        int32_t u10 = (int32_t)(speed_pid.output * 10.0f);
+        const char *usign = (u10 < 0) ? "-" : "";
+        if (u10 < 0) u10 = -u10;
 
         uint32_t d1 = duty_permille(&motor.cfg.ain[0]);
         uint32_t d2 = duty_permille(&motor.cfg.ain[1]);
 
         snprintf(buf, sizeof(buf),
-                 "pulsos:%ld pos:%ld rpm:%s%ld.%ld duty1:%lu.%lu%% duty2:%lu.%lu%%\r\n",
-                 (long)s.delta_counts, (long)s.position_counts,
-                 sign, (long)(rpm10 / 10), (long)(rpm10 % 10),
+                 "sp:%ld rpm:%s%ld.%ld u:%s%ld.%ld duty1:%lu.%lu%% duty2:%lu.%lu%%\r\n",
+                 (long)sp, sign, (long)(rpm10 / 10), (long)(rpm10 % 10),
+                 usign, (long)(u10 / 10), (long)(u10 % 10),
                  (unsigned long)(d1 / 10), (unsigned long)(d1 % 10),
                  (unsigned long)(d2 / 10), (unsigned long)(d2 % 10));
 
