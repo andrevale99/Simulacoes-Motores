@@ -206,6 +206,8 @@ def _plot_graficos_bldc(data, pasta_saida):
     str_iqref = "iq_ref"
     str_vdref = "vd_ref"
     str_vqref = "vq_ref"
+    str_vref = "v_ref"
+    str_sector = "sector"
 
     time = data[str_time]
 
@@ -227,8 +229,12 @@ def _plot_graficos_bldc(data, pasta_saida):
         data[str_ec]
     ])
 
-    iq = data[str_iq]
-    _id = data[str_id]
+    try:
+        iq = data[str_iq]
+        _id = data[str_id]
+    except:
+        print(f"sem Iq e Id, sem transformacao de clark e park");
+    
     te = data[str_te]
     omegar = data[str_omegar]
 
@@ -293,13 +299,19 @@ def _plot_graficos_bldc(data, pasta_saida):
 
         plt.figure(figsize=DEFAULT_FIGSIZE)
 
-        plt.subplot(211)
+        plt.subplot(311)
         plt.plot(time, iabc.T)
         plt.ylabel("A")
         plt.grid()
         no_xlabel()
 
-        plt.subplot(212)
+        plt.subplot(312)
+        plt.plot(time, eabc.T)
+        plt.ylabel("V")
+        plt.grid()
+        no_xlabel()
+
+        plt.subplot(313)
         plt.plot(time, rpm)
         plt.grid()
         plt.ylabel("RPM")
@@ -307,6 +319,29 @@ def _plot_graficos_bldc(data, pasta_saida):
 
         plt.tight_layout()
         plt.savefig(pasta_saida + "01_corrente-rpm.pdf")
+
+        try:
+            plt.figure(figsize=DEFAULT_FIGSIZE)
+
+            vref = data[str_vref]
+            sector = data[str_sector]
+
+            plt.subplot(211)
+            plt.plot(time, vref)
+            plt.ylabel("V")
+            plt.grid()
+            no_xlabel()
+    
+            plt.subplot(212)
+            plt.plot(time, sector)
+            plt.grid()
+            plt.ylabel("setor")
+            plt.xlabel("s")
+    
+            plt.tight_layout()
+            plt.savefig(pasta_saida + "04_vref-sector.pdf")
+        except:
+            pass
 
 
 # ============================================================
