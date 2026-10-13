@@ -226,7 +226,7 @@ if __name__ == "__main__":
         theta_e = TWO_PI * f_e * t
 
         # --- modo PWM senoidal (average duty -> chaveamento real) ---
-        m = 0.9  # indice de modulacao
+        m = 0.5  # indice de modulacao
         duty_a = 0.5 + 0.5 * m * np.sin(theta_e)
         duty_b = 0.5 + 0.5 * m * np.sin(theta_e - TWO_PI / 3.0)
         duty_c = 0.5 + 0.5 * m * np.sin(theta_e + TWO_PI / 3.0)
@@ -241,12 +241,16 @@ if __name__ == "__main__":
     fig, axs = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
 
     axs[0].plot(t_vec, Va_sw, label="Va (PWM)")
+    axs[0].plot(t_vec, Vb_sw, label="Vb (PWM)")
+    axs[0].plot(t_vec, Vc_sw, label="Vc (PWM)")
     axs[0].set_ylabel("Tensao [V]")
     axs[0].set_title("Inversor - PWM senoidal (chaveamento real)")
     axs[0].legend()
     axs[0].grid(True)
 
     axs[1].plot(t_vec, Va_six, label="Va (six-step)")
+    axs[1].plot(t_vec, Vb_six, label="Vb (six-step)")
+    axs[1].plot(t_vec, Vc_six, label="Vc (six-step)")
     axs[1].set_ylabel("Tensao [V]")
     axs[1].set_xlabel("Tempo [s]")
     axs[1].set_title("Inversor - Six-step")
@@ -254,5 +258,6 @@ if __name__ == "__main__":
     axs[1].grid(True)
 
     plt.tight_layout()
-    plt.savefig("inverter_autoteste.png", dpi=120)
+    # plt.savefig("inverter_autoteste.png", dpi=120)
+    plt.show()
     print("Autoteste concluido. Grafico salvo em inverter_autoteste.png")
