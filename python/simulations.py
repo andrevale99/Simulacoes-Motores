@@ -8,7 +8,12 @@ from svpwm import svpwm_init, svpwm_modulate, svpwm_carrier, svpwm_gate_state
 from inverter import Inverter, inverter_output_voltage
 from transforms import clarke_transform, park_transform, park_inverse_transform
 from bldc import BLDCMotor, TimeSimulation, bldc_step
-from dc_motor import DCMotor, dc_motor_step
+from dc_motor import (
+    DCMotor,
+    dc_motor_step,
+    dc_motor_electrical_step,
+    dc_motor_mechanical_step,
+)
 from auxs import rpm_to_rads
 from progressbar import progress_bar_init, progress_bar_update, progress_bar_finish
 
@@ -354,9 +359,15 @@ def simulation_dc_motor_malha_velocidade(args):
         # Tensao aplicada diretamente ao motor
         V = V_hold
 
-        # Planta
-        dc_motor_step(
+        # Planta: dinamica eletrica (V -> ia, e, Te) seguida da
+        # dinamica mecanica (Te, Tl -> omega_r, theta_r)
+        dc_motor_electrical_step(
             V,
+            motor,
+            dt
+        )
+
+        dc_motor_mechanical_step(
             motor,
             dt,
             args.Tl
