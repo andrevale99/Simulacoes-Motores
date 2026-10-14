@@ -12,8 +12,9 @@ from dc_motor import DCMotor, dc_motor_step, dc_motor_electrical_step, dc_motor_
 # ajustar conforme os limites reais do projeto original (nao enviados)
 PI_IQ_MIN, PI_IQ_MAX = -50.0, 50.0
 
+
 #  =====================================================
-#  =====================================================
+#  MOTOR BLDC
 #  =====================================================
 
 def simulation_bldc_malha_corrente_velocidade(args):
@@ -173,17 +174,17 @@ def simulation_bldc_velocidade(args):
 
     vdc_max = args.Vdc / 2
 
-    dtOmega = 1e-3
+    dtOmega = 1e-4
 
     omega_ref = rpm_to_rads(args.rpm)
     print(f"rpm_ref = {args.rpm:.2f} RPM")
     print(f"omega_ref = {omega_ref:.6f} rad/s")
 
-    pi_omega = pid_controller_init(10, 5, 0.0, dtOmega,
-                                    True, -vdc_max, True, vdc_max)
+    pi_omega = pid_controller_init(1, 0.2, 0.0, dtOmega,
+                                    True, 0.0, True, 1.0)
 
     t_next_omega = time_sim.t0
-    v_ref = 0
+    duty_ref = 0
 
     try:
         log_file = open(args.filename, "w")
@@ -192,7 +193,7 @@ def simulation_bldc_velocidade(args):
         return 1
 
     log_file.write("time;Va;Vb;Vc;ia;ib;ic;ea;eb;ec;Te;theta_r;"
-                    "omega_r;v_ref;sector\n")
+                    "omega_r;duty_ref;sector\n")
 
     pb = progress_bar_init(time_sim.t0, time_sim.tf, time_sim.dt)
 
@@ -208,10 +209,10 @@ def simulation_bldc_velocidade(args):
         motor.theta_e = motor.theta_r * motor.P
 
         if t >= t_next_omega:
-            v_ref = pid_controller_update(pi_omega, omega_ref, motor.omega_r)
+            duty_ref = pid_controller_update(pi_omega, omega_ref, motor.omega_r)
             t_next_omega += dtOmega
 
-        Vabc, sector = six_step_commutation(inverter, motor.theta_e)
+        Vabc, sector = six_step_commutation(inverter, motor.theta_e, duty_ref)
 
         bldc_step(Vabc, motor, time_sim, args.Tl, True)
 
@@ -222,7 +223,7 @@ def simulation_bldc_velocidade(args):
             f"{motor.iabc[0]:.4f};{motor.iabc[1]:.4f};{motor.iabc[2]:.4f};"
             f"{motor.eabc[0]:.4f};{motor.eabc[1]:.4f};{motor.eabc[2]:.4f};"
             f"{motor.Te:.4f};{motor.theta_r:.3f};"
-            f"{motor.omega_r:.4f};{v_ref:.4f};{sector}\n"
+            f"{motor.omega_r:.4f};{duty_ref:.4f};{sector}\n"
         )
 
     progress_bar_finish(pb)
@@ -233,6 +234,11 @@ def simulation_bldc_velocidade(args):
     plot_graficos(args.filename, motor_type="bldc") 
 
     return 0
+
+#  =====================================================
+#  MOTOR DC
+#  =====================================================
+
 
 #  =====================================================
 #  =====================================================
