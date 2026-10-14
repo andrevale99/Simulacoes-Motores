@@ -206,7 +206,7 @@ def _plot_graficos_bldc(data, pasta_saida):
     str_iqref = "iq_ref"
     str_vdref = "vd_ref"
     str_vqref = "vq_ref"
-    str_vref = "v_ref"
+    str_dutyref = "duty_ref"
     str_sector = "sector"
 
     time = data[str_time]
@@ -323,12 +323,12 @@ def _plot_graficos_bldc(data, pasta_saida):
         try:
             plt.figure(figsize=DEFAULT_FIGSIZE)
 
-            vref = data[str_vref]
+            duty_ref = data[str_dutyref]
             sector = data[str_sector]
 
             plt.subplot(211)
-            plt.plot(time, vref)
-            plt.ylabel("V")
+            plt.plot(time, duty_ref)
+            plt.ylabel("duty cycle")
             plt.grid()
             no_xlabel()
     
@@ -339,7 +339,7 @@ def _plot_graficos_bldc(data, pasta_saida):
             plt.xlabel("s")
     
             plt.tight_layout()
-            plt.savefig(pasta_saida + "04_vref-sector.pdf")
+            plt.savefig(pasta_saida + "04_dutycycle-sector.pdf")
         except:
             pass
 
