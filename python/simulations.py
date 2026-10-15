@@ -5,6 +5,7 @@ from params import get_args
 from graficos import plot_graficos
 from pid_controller import pid_controller_init, pid_controller_update
 from svpwm import svpwm_init, svpwm_modulate, svpwm_carrier, svpwm_gate_state
+<<<<<<< HEAD
 from inverter import (
     Inverter,
     inverter_output_voltage,
@@ -14,6 +15,11 @@ from inverter import (
 )
 from transforms import clarke_transform, park_transform, park_inverse_transform
 from bldc import BLDCMotor, TimeSimulation, bldc_step, bldc_step_switched
+=======
+from inverter import Inverter, inverter_output_voltage, six_step_commutation
+from transforms import clarke_transform, park_transform, park_inverse_transform
+from bldc import BLDCMotor, TimeSimulation, bldc_step
+>>>>>>> ea4e0b9 (.)
 from dc_motor import (
     DCMotor,
     dc_motor_step,
@@ -412,16 +418,25 @@ def simulation_dc_motor_malha_velocidade(args):
 
 # Alinhamento da comutacao six-step com a FCEM do bldc.py (equivalente ao
 # posicionamento dos sensores Hall). No bldc.py, a FCEM de cada fase e
+<<<<<<< HEAD
 # f = -trapezoidal(theta_e + phi), e a tabela de six_step_gates() assume o
 # setor 1 em 0-60 graus. Para torque positivo, as chaves devem comutar em
 # theta_e = 30, 90, 150... graus, o que equivale a somar 150 graus (5*pi/6)
 # ao angulo antes de buscar o setor. Medido por varredura em 0-360 graus:
 # maximo torque exatamente em 150 graus.
+=======
+# f = -trapezoidal(theta_e + phi), e a tabela de six_step_commutation()
+# assume o setor 1 em 0-60 graus. Para torque positivo, as chaves devem
+# comutar em theta_e = 30, 90, 150... graus, o que equivale a somar 150 graus
+# (5*pi/6) ao angulo antes de buscar o setor. Medido por varredura em
+# 0-360 graus: maximo torque exatamente em 150 graus.
+>>>>>>> ea4e0b9 (.)
 SIX_STEP_THETA_OFFSET = 5.0 * math.pi / 6.0
 
 
 def simulation_bldc_velocidade(args):
     """
+<<<<<<< HEAD
     Controle de velocidade do motor BLDC com inversor trifasico de seis
     chaves e comutacao six-step (120 graus).
 
@@ -438,6 +453,16 @@ def simulation_bldc_velocidade(args):
       que o periodo de chaveamento Ts = 1/Fsw.
 
     Apenas rotacao no sentido positivo (rpm > 0) e suportada.
+=======
+    Controle de velocidade do motor BLDC com comutacao six-step.
+
+        referencia -> PID de velocidade (em pu) -> amplitude -> six-step
+
+    O PID trabalha em por unidade (referencia = 1, realimentacao =
+    omega_r / omega_ref) e sua saida, limitada a [0, 1], e a AMPLITUDE da
+    tensao (0 = sem tensao, 1 = onda quadrada plena). Apenas rotacao no
+    sentido positivo (rpm > 0) e suportada.
+>>>>>>> ea4e0b9 (.)
     """
 
     motor = BLDCMotor(
@@ -471,17 +496,30 @@ def simulation_bldc_velocidade(args):
 
     inverter = Inverter(Vdc=args.Vdc)
 
+<<<<<<< HEAD
     dtOmega = 10e-3
+=======
+    dtOmega = 1e-3
+>>>>>>> ea4e0b9 (.)
 
     print(f"rpm_ref = {args.rpm:.2f} RPM")
     print(f"omega_ref = {omega_ref:.6f} rad/s")
 
+<<<<<<< HEAD
     # PID de velocidade em pu: Kp = 5, Ki = 1, saida (duty) em [0, 1]
     pi_omega = pid_controller_init(5, 1, 0.0, dtOmega,
                                    True, 0.0, True, 1.0)
 
     t_next_omega = time_sim.t0
     duty_ref = 0.0      # duty da chave superior da fase alta, em [0, 1]
+=======
+    # PID de velocidade em pu: Kp = 5, Ki = 1, saida (amplitude) em [0, 1]
+    pi_omega = pid_controller_init(5, 10, 0.0, dtOmega,
+                                   True, 0.0, True, 1.0)
+
+    t_next_omega = time_sim.t0
+    duty_ref = 0.0      # amplitude comandada pelo PID, em [0, 1]
+>>>>>>> ea4e0b9 (.)
 
     try:
         log_file = open(args.filename, "w")
@@ -512,6 +550,7 @@ def simulation_bldc_velocidade(args):
 
         motor.theta_e = (motor.P * motor.theta_r) % TWO_PI
 
+<<<<<<< HEAD
         # Setor de comutacao (com o alinhamento da FCEM) e estado das chaves
         sector = six_step_sector(motor.theta_e + SIX_STEP_THETA_OFFSET)
         carrier = inverter_carrier(Ts, t)
@@ -519,6 +558,20 @@ def simulation_bldc_velocidade(args):
 
         # Inversor + motor (fase flutuante aberta, roda livre pelos diodos)
         Vabc = bldc_step_switched(gates, inverter, motor, time_sim, args.Tl, True)
+=======
+        # six_step_commutation aplica `duty` na fase alta e `1 - duty` na
+        # baixa: duty = 0.5 e tensao ZERO e duty < 0.5 inverteria a
+        # polaridade. Por isso a amplitude [0, 1] do PID e mapeada para
+        # duty = 0.5 + 0.5*amplitude, e o angulo recebe o alinhamento
+        # da FCEM do motor.
+        Vabc, sector = six_step_commutation(
+            inverter,
+            motor.theta_e + SIX_STEP_THETA_OFFSET,
+            0.5 + 0.5*duty_ref,
+        )
+
+        bldc_step(Vabc, motor, time_sim, args.Tl, True)
+>>>>>>> ea4e0b9 (.)
 
         progress_bar_update(pb, t)
 

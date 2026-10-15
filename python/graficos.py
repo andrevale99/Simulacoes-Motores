@@ -206,8 +206,6 @@ def _plot_graficos_bldc(data, pasta_saida):
     str_iqref = "iq_ref"
     str_vdref = "vd_ref"
     str_vqref = "vq_ref"
-    str_dutyref = "duty_ref"
-    str_sector = "sector"
 
     time = data[str_time]
 
@@ -229,18 +227,17 @@ def _plot_graficos_bldc(data, pasta_saida):
         data[str_ec]
     ])
 
-    try:
-        iq = data[str_iq]
-        _id = data[str_id]
-    except:
-        print(f"sem Iq e Id, sem transformacao de clark e park");
-    
-    te = data[str_te]
     omegar = data[str_omegar]
 
     rpm = omegar * 60.0 / (2 * np.pi)
 
     try:
+
+        # colunas especificas do FOC: se faltarem (ex.: six-step),
+        # cai no grafico alternativo abaixo
+        iq = data[str_iq]
+        _id = data[str_id]
+        te = data[str_te]
 
         iqref = data[str_iqref]
         vdref = data[str_vdref]
@@ -299,19 +296,13 @@ def _plot_graficos_bldc(data, pasta_saida):
 
         plt.figure(figsize=DEFAULT_FIGSIZE)
 
-        plt.subplot(311)
+        plt.subplot(211)
         plt.plot(time, iabc.T)
         plt.ylabel("A")
         plt.grid()
         no_xlabel()
 
-        plt.subplot(312)
-        plt.plot(time, eabc.T)
-        plt.ylabel("V")
-        plt.grid()
-        no_xlabel()
-
-        plt.subplot(313)
+        plt.subplot(212)
         plt.plot(time, rpm)
         plt.grid()
         plt.ylabel("RPM")
@@ -319,29 +310,6 @@ def _plot_graficos_bldc(data, pasta_saida):
 
         plt.tight_layout()
         plt.savefig(pasta_saida + "01_corrente-rpm.pdf")
-
-        try:
-            plt.figure(figsize=DEFAULT_FIGSIZE)
-
-            duty_ref = data[str_dutyref]
-            sector = data[str_sector]
-
-            plt.subplot(211)
-            plt.plot(time, duty_ref)
-            plt.ylabel("duty cycle")
-            plt.grid()
-            no_xlabel()
-    
-            plt.subplot(212)
-            plt.plot(time, sector)
-            plt.grid()
-            plt.ylabel("setor")
-            plt.xlabel("s")
-    
-            plt.tight_layout()
-            plt.savefig(pasta_saida + "04_dutycycle-sector.pdf")
-        except:
-            pass
 
 
 # ============================================================
