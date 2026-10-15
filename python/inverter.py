@@ -204,6 +204,92 @@ def line_to_line_voltages(Vabc):
 
 
 # ----------------------------------------------------------------------
+#   MODO 4: INVERSOR PERNA A PERNA (CHAVES + DIODOS) PARA O SIX-STEP
+# ----------------------------------------------------------------------
+#
+# Aqui o inversor e modelado por perna: cada perna tem uma chave superior,
+# uma chave inferior e dois diodos de roda livre. O estado de cada perna e:
+#
+#     +1 -> chave superior ligada  (polo em Vdc)
+#     -1 -> chave inferior ligada  (polo em 0 V)
+#      0 -> as duas chaves desligadas: o polo depende dos diodos
+#
+# Com as duas chaves desligadas:
+#   corrente > 0 (do inversor para o motor) -> diodo inferior conduz, polo = 0
+#   corrente < 0 (do motor para o inversor) -> diodo superior conduz, polo = Vdc
+#   corrente = 0                            -> perna aberta (polo indefinido;
+#                                              quem resolve e a planta)
+
+def six_step_gates(sector, duty, carrier):
+    """
+    Estado das chaves de cada perna no six-step (120 graus), com regulacao
+    de amplitude por PWM na chave superior da fase "alta" (esquema
+    H_PWM-L_ON):
+
+      fase alta      : chave superior chaveada (liga quando duty > portadora);
+                       desligada, a perna fica com as duas chaves abertas e a
+                       corrente circula pelo diodo inferior (roda livre)
+      fase baixa     : chave inferior sempre ligada
+      fase flutuante : as duas chaves desligadas (perna aberta)
+
+    Retorna (ga, gb, gc), com g em {+1, -1, 0} (ver convencao acima).
+    """
+    gates = []
+    for state in SIX_STEP_TABLE[sector]:
+        if state == 1:
+            gates.append(1 if inverter_gate_state(duty, carrier) else 0)
+        elif state == -1:
+            gates.append(-1)
+        else:
+            gates.append(0)
+    return tuple(gates)
+
+
+def inverter_pole_voltages(inverter, gates, currents):
+    """
+    Tensao de polo de cada perna a partir do estado das chaves e do sentido
+    das correntes de fase.
+
+    Retorna (poles, diode):
+      poles[k] : Vdc, 0.0, ou None se a perna estiver aberta
+      diode[k] : +1 se o diodo superior conduz (exige corrente <= 0),
+                 -1 se o diodo inferior conduz (exige corrente >= 0),
+                  0 se a perna e comandada por chave ou esta aberta
+    """
+    poles = [None, None, None]
+    diode = [0, 0, 0]
+
+    for k in range(3):
+        if gates[k] > 0:
+            poles[k] = inverter.Vdc
+        elif gates[k] < 0:
+            poles[k] = 0.0
+        elif currents[k] > 0.0:
+            poles[k] = 0.0
+            diode[k] = -1
+        elif currents[k] < 0.0:
+            poles[k] = inverter.Vdc
+            diode[k] = 1
+
+    return poles, diode
+
+
+def inverter_open_leg_clamp(inverter, v_open):
+    """
+    Uma perna aberta (corrente zero) so continua aberta enquanto a tensao
+    que a FCEM imporia no seu polo ficar entre 0 e Vdc. Fora disso, um dos
+    diodos fica diretamente polarizado e passa a conduzir.
+
+    Retorna (polo, diodo): (Vdc, +1), (0.0, -1) ou (None, 0) se continua aberta.
+    """
+    if v_open > inverter.Vdc:
+        return inverter.Vdc, 1
+    if v_open < 0.0:
+        return 0.0, -1
+    return None, 0
+
+
+# ----------------------------------------------------------------------
 #   AUTOTESTE (roda so quando o arquivo e executado diretamente)
 # ----------------------------------------------------------------------
 
