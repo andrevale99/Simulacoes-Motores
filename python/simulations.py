@@ -5,7 +5,6 @@ from params import get_args
 from graficos import plot_graficos
 from pid_controller import pid_controller_init, pid_controller_update
 from svpwm import svpwm_init, svpwm_modulate, svpwm_carrier, svpwm_gate_state
-<<<<<<< HEAD
 from inverter import (
     Inverter,
     inverter_output_voltage,
@@ -15,11 +14,6 @@ from inverter import (
 )
 from transforms import clarke_transform, park_transform, park_inverse_transform
 from bldc import BLDCMotor, TimeSimulation, bldc_step, bldc_step_switched
-=======
-from inverter import Inverter, inverter_output_voltage, six_step_commutation
-from transforms import clarke_transform, park_transform, park_inverse_transform
-from bldc import BLDCMotor, TimeSimulation, bldc_step
->>>>>>> ea4e0b9 (.)
 from dc_motor import (
     DCMotor,
     dc_motor_step,
@@ -469,7 +463,7 @@ def simulation_bldc_velocidade(args):
 
     inverter = Inverter(Vdc=args.Vdc)
 
-    dtOmega = 1e-3
+    dtOmega = 10e-3
 
     print(f"rpm_ref = {args.rpm:.2f} RPM")
     print(f"omega_ref = {omega_ref:.6f} rad/s")
