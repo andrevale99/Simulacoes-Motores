@@ -471,7 +471,7 @@ def simulation_bldc_velocidade(args):
 
     inverter = Inverter(Vdc=args.Vdc)
 
-    dtOmega = 1e-4
+    dtOmega = 10e-3
 
     print(f"rpm_ref = {args.rpm:.2f} RPM")
     print(f"omega_ref = {omega_ref:.6f} rad/s")
