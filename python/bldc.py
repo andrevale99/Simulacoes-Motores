@@ -53,8 +53,12 @@ def bldc_step(Vabc, motor, time, Tl, trapezoidal_back_emf_flag):
         fabc[i] = -trapezoidal_back_emf(angle) if trapezoidal_back_emf_flag else -math.sin(angle)
         motor.eabc[i] = motor.Ke * motor.omega_r * fabc[i]
 
+    # Neutro isolado (estrela sem fio de neutro): vn e a tensao que mantem
+    # ia + ib + ic = 0, mesmo com sum(eabc) != 0 (FCEM trapezoidal).
+    u = [Vabc[i] - motor.R*motor.iabc[i] - motor.eabc[i] for i in range(3)]
+    vn = sum(u) / 3.0
     for i in range(3):
-        diabc_i = (Vabc[i] - motor.R*motor.iabc[i] - motor.eabc[i]) / (motor.L - motor.M)
+        diabc_i = (u[i] - vn) / (motor.L - motor.M)
         motor.iabc[i] += diabc_i * time.dt
 
     motor.Te = motor.Kt * sum(motor.iabc[i]*fabc[i] for i in range(3))
@@ -69,8 +73,8 @@ def bldc_step_switched(gates, inverter, motor, time, Tl, trapezoidal_back_emf_fl
     Um passo do motor BLDC alimentado por um inversor modelado perna a perna
     (chaves + diodos de roda livre), com neutro isolado.
 
-    Diferente de bldc_step(), que recebe as tensoes de fase prontas e trata as
-    tres fases como independentes, aqui:
+    Diferente de bldc_step(), que recebe as tensoes de fase prontas (as tres
+    pernas sempre comandadas por chave), aqui:
 
       * a tensao de polo de cada perna vem das chaves e dos diodos
         (inverter_pole_voltages);
@@ -85,7 +89,7 @@ def bldc_step_switched(gates, inverter, motor, time, Tl, trapezoidal_back_emf_fl
     Para o conjunto C de pernas que conduzem, com u_k = polo_k - R*i_k - e_k:
 
         vn      = media de u_k em C            (tensao do neutro)
-        di_k/dt = (u_k - vn) / (L + M)         (soma das di_k = 0)
+        di_k/dt = (u_k - vn) / (L - M)        (soma das di_k = 0)
 
     Parametros
     ----------
