@@ -228,6 +228,7 @@ def _plot_graficos_bldc(data, pasta_saida):
     ])
 
     omegar = data[str_omegar]
+    te = data[str_te]
 
     rpm = omegar * 60.0 / (2 * np.pi)
 
@@ -237,8 +238,7 @@ def _plot_graficos_bldc(data, pasta_saida):
         # cai no grafico alternativo abaixo
         iq = data[str_iq]
         _id = data[str_id]
-        te = data[str_te]
-
+        
         iqref = data[str_iqref]
         vdref = data[str_vdref]
         vqref = data[str_vqref]
@@ -296,13 +296,19 @@ def _plot_graficos_bldc(data, pasta_saida):
 
         plt.figure(figsize=DEFAULT_FIGSIZE)
 
-        plt.subplot(211)
+        plt.subplot(311)
         plt.plot(time, iabc.T)
         plt.ylabel("A")
         plt.grid()
         no_xlabel()
 
-        plt.subplot(212)
+        plt.subplot(312)
+        plt.plot(time, te)
+        plt.ylabel("N.m")
+        plt.grid()
+        no_xlabel()
+
+        plt.subplot(313)
         plt.plot(time, rpm)
         plt.grid()
         plt.ylabel("RPM")
