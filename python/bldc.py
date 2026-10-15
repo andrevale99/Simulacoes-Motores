@@ -54,7 +54,7 @@ def bldc_step(Vabc, motor, time, Tl, trapezoidal_back_emf_flag):
         motor.eabc[i] = motor.Ke * motor.omega_r * fabc[i]
 
     for i in range(3):
-        diabc_i = (Vabc[i] - motor.R*motor.iabc[i] - motor.eabc[i]) / (motor.L + motor.M)
+        diabc_i = (Vabc[i] - motor.R*motor.iabc[i] - motor.eabc[i]) / (motor.L - motor.M)
         motor.iabc[i] += diabc_i * time.dt
 
     motor.Te = motor.Kt * sum(motor.iabc[i]*fabc[i] for i in range(3))
@@ -100,7 +100,7 @@ def bldc_step_switched(gates, inverter, motor, time, Tl, trapezoidal_back_emf_fl
     """
     dt = time.dt
     R = motor.R
-    leff = motor.L + motor.M
+    leff = motor.L - motor.M
 
     # --- posicao e FCEM (igual ao bldc_step) ---
     motor.theta_e = math.fmod(motor.P*motor.theta_r, TWO_PI)
