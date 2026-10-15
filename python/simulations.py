@@ -110,6 +110,11 @@ def simulation_bldc_malha_corrente_velocidade(args):
         vd_ref = vd_ref_hold
 
         if t >= t_next_iq:
+            # Limite do VETOR de tensao (regiao linear do SVPWM, |v| <= Vdc/sqrt3)
+            # com prioridade ao eixo d: vq usa so a margem que vd deixou. O
+            # limite vai para o proprio PI, para o anti-windup usar o mesmo valor.
+            vq_lim = math.sqrt(max(vdc_max**2 - vd_ref**2, 0.0))
+            pi_q.output_min, pi_q.output_max = -vq_lim, vq_lim
             vq_ref_hold = pid_controller_update(pi_q, iq_ref, i_q)
             t_next_iq += dtIq
         vq_ref = vq_ref_hold
