@@ -22,6 +22,7 @@ from dc_motor import (
 )
 from auxs import rpm_to_rads, TWO_PI
 from progressbar import progress_bar_init, progress_bar_update, progress_bar_finish
+from vf_ramp import VfRamp
 
 # ajustar conforme os limites reais do projeto original (nao enviados)
 PI_IQ_MIN, PI_IQ_MAX = -50.0, 50.0
@@ -424,6 +425,19 @@ def simulation_dc_motor_malha_velocidade(args):
 # 0-360 graus: maximo torque exatamente em 150 graus.
 SIX_STEP_THETA_OFFSET = 5.0 * math.pi / 6.0
 
+# Partida em rampa V/f do six-step (usada quando MalhaAberta = true), com os
+# valores do firmware (ENV_MOTOR_*). u e o duty da fase alta, em pu de Vdc
+# (u = 1 -> tensao de linha = Vdc). Ao atingir VF_RAMP_END_RPM, passa para o
+# PI de velocidade.
+VF_ALIGN_U = 0.15          # pu - amplitude do alinhamento
+VF_ALIGN_T = 0.5           # s - cada um dos 2 passos do alinhamento
+VF_START_RPM = 60.0        # rpm mecanico - inicio da rampa
+VF_RAMP_END_RPM = 500.0    # rpm mecanico - fim da rampa: entra na malha fechada
+VF_RAMP_RPM_PER_S = 300.0  # rpm/s - taxa da rampa
+VF_U_OFFSET = 0.10         # pu - amplitude em 0 rpm
+VF_U_PER_RPM = 0.0002      # pu/rpm - inclinacao V/f
+VF_U_MAX = 0.50            # pu - limite da amplitude
+
 
 def simulation_bldc_velocidade(args):
     """
@@ -435,6 +449,10 @@ def simulation_bldc_velocidade(args):
     omega_r / omega_ref) e sua saida, limitada a [0, 1], e a AMPLITUDE da
     tensao (0 = sem tensao, 1 = onda quadrada plena). Apenas rotacao no
     sentido positivo (rpm > 0) e suportada.
+
+    Com MalhaAberta = true, a partida e feita em rampa V/f (VF_*): alinhamento
+    em 2 passos e comutacao forcada pelo angulo comandado, sem usar a posicao
+    do rotor. Ao atingir VF_RAMP_END_RPM, passa para o PI de velocidade.
     """
 
     motor = BLDCMotor(
@@ -468,17 +486,38 @@ def simulation_bldc_velocidade(args):
 
     inverter = Inverter(Vdc=args.Vdc)
 
-    dtOmega = 10e-3
+    dtOmega = 1e-4
 
     print(f"rpm_ref = {args.rpm:.2f} RPM")
     print(f"omega_ref = {omega_ref:.6f} rad/s")
 
     # PID de velocidade em pu: Kp = 5, Ki = 1, saida (duty) em [0, 1]
-    pi_omega = pid_controller_init(5, 1, 0.0, dtOmega,
+    # pi_omega = pid_controller_init(args.KpOmega, args.KiOmega, 0.0, dtOmega,
+    #                                True, 0.0, True, 1.0)
+    pi_omega = pid_controller_init(10, 4, 0.0, dtOmega,
                                    True, 0.0, True, 1.0)
 
     t_next_omega = time_sim.t0
     duty_ref = 0.0      # duty da chave superior da fase alta, em [0, 1]
+
+    # Referencia de velocidade vista pelo PI. Sem V/f, e o degrau direto em
+    # omega_ref; com V/f, parte da velocidade da troca e sobe em rampa
+    omega_cmd = omega_ref
+    omega_cmd_rate = rpm_to_rads(VF_RAMP_RPM_PER_S)    # rad/s por segundo
+
+    vf = None
+    if args.MalhaAberta:
+        # Alinhamento no meio dos setores 1 (A alto, B baixo) e 2 (A alto,
+        # C baixo), como no firmware; a rampa segue a partir do setor 2
+        vf = VfRamp(P=motor.P, v_base=1.0,
+                    u_align=VF_ALIGN_U, t_align=VF_ALIGN_T,
+                    rpm_start=VF_START_RPM, rpm_end=VF_RAMP_END_RPM,
+                    rpm_per_s=VF_RAMP_RPM_PER_S, u_offset=VF_U_OFFSET,
+                    u_per_rpm=VF_U_PER_RPM, u_max=VF_U_MAX,
+                    align_angles=(math.pi/6.0, math.pi/2.0))
+        print(f"Partida V/f: alinhamento 2 x {VF_ALIGN_T} s (u = {VF_ALIGN_U}), "
+              f"rampa de {VF_START_RPM:.0f} a {VF_RAMP_END_RPM:.0f} rpm "
+              f"a {VF_RAMP_RPM_PER_S:.0f} rpm/s")
 
     try:
         log_file = open(args.filename, "w")
@@ -487,7 +526,7 @@ def simulation_bldc_velocidade(args):
         return 1
 
     log_file.write("time;Va;Vb;Vc;ia;ib;ic;ea;eb;ec;Te;theta_r;"
-                   "omega_r;duty_ref;sector\n")
+                   "omega_r;duty_ref;sector;vf;omega_cmd\n")
 
     pb = progress_bar_init(time_sim.t0, time_sim.tf, time_sim.dt)
 
@@ -501,16 +540,36 @@ def simulation_bldc_velocidade(args):
         # if t >= args.Ttl:
         #     args.Tl = args.Tlnew
 
-        # Malha de velocidade em pu (referencia normalizada = 1.0)
-        if t >= t_next_omega:
-            duty_ref = pid_controller_update(pi_omega, 1.0,
-                                             motor.omega_r/omega_ref)
-            t_next_omega += dtOmega
-
         motor.theta_e = (motor.P * motor.theta_r) % TWO_PI
 
-        # Setor de comutacao (com o alinhamento da FCEM) e estado das chaves
-        sector = six_step_sector(motor.theta_e + SIX_STEP_THETA_OFFSET)
+        if vf is not None and not vf.finished:
+            # Partida em malha aberta: setor pelo angulo comandado da rampa,
+            # sem usar a posicao do rotor
+            vf.update(dt, motor.omega_r)
+            duty_ref = vf.u
+            sector = six_step_sector(vf.theta_v)
+
+            if vf.finished:
+                # Transferencia sem degrau: a referencia parte da velocidade
+                # atual (erro nulo) e o integrador comeca no duty atual
+                print(f"\nRampa V/f concluida em t = {t:.4f} s "
+                      f"({motor.omega_r*60/TWO_PI:.1f} rpm, u = {vf.u:.3f}) "
+                      f"-> malha fechada.\n")
+                omega_cmd = min(motor.omega_r, omega_ref)
+                pi_omega.integral = duty_ref
+                t_next_omega = t + dt
+        else:
+            # Malha de velocidade em pu (base omega_ref), com a referencia
+            # subindo em rampa ate omega_ref
+            if t >= t_next_omega:
+                omega_cmd = min(omega_cmd + omega_cmd_rate*dtOmega, omega_ref)
+                duty_ref = pid_controller_update(pi_omega, omega_cmd/omega_ref,
+                                                 motor.omega_r/omega_ref)
+                t_next_omega += dtOmega
+
+            # Setor de comutacao (com o alinhamento da FCEM)
+            sector = six_step_sector(motor.theta_e + SIX_STEP_THETA_OFFSET)
+
         carrier = inverter_carrier(Ts, t)
         gates = six_step_gates(sector, duty_ref, carrier)
 
@@ -524,7 +583,8 @@ def simulation_bldc_velocidade(args):
             f"{motor.iabc[0]:.4f};{motor.iabc[1]:.4f};{motor.iabc[2]:.4f};"
             f"{motor.eabc[0]:.4f};{motor.eabc[1]:.4f};{motor.eabc[2]:.4f};"
             f"{motor.Te:.4f};{motor.theta_r:.3f};"
-            f"{motor.omega_r:.4f};{duty_ref:.4f};{sector}\n"
+            f"{motor.omega_r:.4f};{duty_ref:.4f};{sector};"
+            f"{int(vf is not None and not vf.finished)};{omega_cmd:.4f}\n"
         )
 
     progress_bar_finish(pb)
