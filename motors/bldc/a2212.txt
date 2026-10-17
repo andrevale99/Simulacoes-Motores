@@ -16,7 +16,7 @@ R  = 0.5              # Ohm       - resistencia de armadura
 L  = 0.3e-3           # H         - indutancia de magnetizacao
 M  = 0.0              # H         - indutancia mutua
 Ke = 0.00909483       # V/(rad/s) - constante eletrica (FCEM)
-J  = 1.0e-4           # kg.m^2    - momento de inercia do rotor
+J  = 1.0e-5           # kg.m^2    - momento de inercia do rotor
 B  = 5e-5             # N.m/(rad/s) - coeficiente de atrito viscoso
 Tl = 0.0              # N.m       - torque de carga aplicado ao eixo
 P  = 7                # -         - numero de pares de polos
@@ -36,8 +36,8 @@ Dt = 1e-6             # s - passo de integracao explicito
                       # calculo automatico)
 
 # --- injecao da nova carga Tl ---
-Ttl = 0.3           # s - tempo de injecao da nova carga
-Tlnew = 0.1         # N.m - Torque da nova carga
+Ttl = 0.0           # s - tempo de injecao da nova carga
+Tlnew = 0.0         # N.m - Torque da nova carga
 
 # --- Barramento CC ---
 Vdc = 12              # V - tensao do barramento CC
@@ -62,7 +62,7 @@ rpm = 1500             # RPM (mecanico) - velocidade desejada
 # true/yes/on
 # false/no/off
 # Partida com Fonte de alimentação senoidal
-MalhaAberta = 0
+MalhaAberta = 1
 
 # --- Saida ---
 file = bldc_closedloop_simulation.csv
