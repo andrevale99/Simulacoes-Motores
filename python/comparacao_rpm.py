@@ -3,10 +3,9 @@ Compara, em um unico grafico, a velocidade (RPM) medida em um ensaio do
 firmware (testes/log-*.csv) com a velocidade da simulacao.
 
 Uso:
-    python comparacao_rpm.py <teste> [simulacao.csv]
+    python comparacao_rpm.py <teste.csv> <simulacao.csv> <saida.pdf>
 
-    <teste> pode ser o caminho do log ou so o RPM alvo (ex.: 500 ->
-    testes/log-500.csv).
+    ex.: python comparacao_rpm.py testes/log-500.csv teste-six-step.csv figuras/comparacao.pdf
 """
 import argparse
 import os
@@ -16,11 +15,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from graficos import DEFAULT_PASTA, DEFAULT_FIGSIZE  # aplica tambem o rcParams
-
-
-DEFAULT_SIM_CSV = "teste-six-step.csv"
-DEFAULT_TESTES = "testes/"
+from graficos import DEFAULT_FIGSIZE  # aplica tambem o rcParams
 
 
 def _rpm_alvo(arquivo):
@@ -28,13 +23,7 @@ def _rpm_alvo(arquivo):
     return int(m.group(1)) if m else 0
 
 
-def _arquivo_teste(teste):
-    if os.path.isfile(teste):
-        return teste
-    return os.path.join(DEFAULT_TESTES, f"log-{teste}.csv")
-
-
-def plot_comparacao_rpm(teste_csv, sim_csv=DEFAULT_SIM_CSV):
+def plot_comparacao_rpm(teste_csv, sim_csv, saida):
     plt.figure(figsize=DEFAULT_FIGSIZE)
 
     # Ensaio: linhas com '#' sao mensagens do firmware
@@ -54,24 +43,20 @@ def plot_comparacao_rpm(teste_csv, sim_csv=DEFAULT_SIM_CSV):
     plt.grid()
     plt.legend()
     plt.tight_layout()
-    plt.savefig(DEFAULT_PASTA + f"05_comparacao_rpm-{rpm_alvo}.pdf")
+    plt.savefig(saida)
     plt.show()
 
 
 if __name__ == "__main__":
-    testes = sorted((f for f in os.listdir(DEFAULT_TESTES) if f.startswith("log-")),
-                    key=_rpm_alvo)
-
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("teste", help="log do ensaio ou RPM alvo "
-                        f"(disponiveis: {', '.join(str(_rpm_alvo(f)) for f in testes)})")
-    parser.add_argument("simulacao", nargs="?", default=DEFAULT_SIM_CSV,
-                        help=f"csv da simulacao (padrao: {DEFAULT_SIM_CSV})")
+    parser.add_argument("teste", help="csv do log do ensaio (ex.: testes/log-500.csv)")
+    parser.add_argument("simulacao", help="csv da simulacao (ex.: teste-six-step.csv)")
+    parser.add_argument("saida", help="arquivo da figura a ser salva (inclui o diretorio)")
     args = parser.parse_args()
 
-    teste_csv = _arquivo_teste(args.teste)
-    if not os.path.isfile(teste_csv):
-        parser.error(f'arquivo de teste "{teste_csv}" nao encontrado')
+    for arq in (args.teste, args.simulacao):
+        if not os.path.isfile(arq):
+            parser.error(f'arquivo "{arq}" nao encontrado')
 
-    plot_comparacao_rpm(teste_csv, args.simulacao)
+    plot_comparacao_rpm(args.teste, args.simulacao, args.saida)
