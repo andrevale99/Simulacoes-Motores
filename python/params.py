@@ -50,6 +50,9 @@ DEFAULTS = {
 
     # Referencia de velocidade
     "rpm": 20.0,
+    # Vetor de referencia [(t, rpm), ...] em degraus; vazio = usa "rpm"
+    # (so na simulacao six-step, simulation_bldc_velocidade)
+    "rpmRef": [],
 
     # Partida em malha aberta
     "MalhaAberta": False,
@@ -71,6 +74,7 @@ TYPES = {
     "KpId": float, "KiId": float, "KdId": float,
     "KpIq": float, "KiIq": float, "KdIq": float,
     "rpm": float,
+    "rpmRef": "rpm_ref",
     "MalhaAberta": bool,
     "filename": str,
 }
@@ -94,10 +98,40 @@ def parse_bool(value):
                       f"(use true/false, yes/no, on/off, 1/0)")
 
 
+def parse_rpm_ref(value):
+    """
+    Converte "t0:rpm0, t1:rpm1, ..." em uma lista [(t0, rpm0), (t1, rpm1), ...]
+    ordenada pelo tempo. Cada rpm vale de t_i ate t_(i+1) (degraus); antes do
+    primeiro instante vale o primeiro rpm. Texto vazio -> lista vazia.
+    """
+    pontos = []
+    for item in str(value).replace(";", ",").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        t_str, sep, rpm_str = item.partition(":")
+        if not sep:
+            raise ValueError(f"item '{item}' sem ':' (use tempo:rpm)")
+        try:
+            t, rpm = float(t_str), float(rpm_str)
+        except ValueError:
+            raise ValueError(f"item '{item}' nao e numerico (use tempo:rpm)")
+        if t < 0.0 or rpm <= 0.0:
+            raise ValueError(f"item '{item}': exige tempo >= 0 e rpm > 0")
+        pontos.append((t, rpm))
+    pontos.sort()
+    return pontos
+
+
 def cast_value(key, raw_value):
     typ = TYPES.get(key, str)
     if typ is bool:
         return parse_bool(raw_value)
+    if typ == "rpm_ref":
+        try:
+            return parse_rpm_ref(raw_value)
+        except ValueError as e:
+            raise ValueError(f"Valor invalido para '{key}': {e}")
     try:
         return typ(raw_value)
     except ValueError:
@@ -163,6 +197,13 @@ def parse_config_file(path):
     return result
 
 
+def _rpm_ref_arg(value):
+    try:
+        return parse_rpm_ref(value)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e))
+
+
 def build_arg_parser():
     parser = argparse.ArgumentParser(
         description="Simulacao closedloop BLDC/PMSM (FOC + SVPWM).",
@@ -225,6 +266,9 @@ def build_arg_parser():
     # Referencia
     g_ref = parser.add_argument_group("Referencia de velocidade")
     g_ref.add_argument("--rpm", type=float, default=None, help="rpm - velocidade de referencia")
+    g_ref.add_argument("--rpm-ref", dest="rpmRef", type=_rpm_ref_arg, default=None,
+                        help='vetor de referencia em degraus "t0:rpm0, t1:rpm1, ..." '
+                             "(so simulation_bldc_velocidade; vazio = usa --rpm)")
 
     # Malha aberta
     g_open = parser.add_argument_group("Partida em malha aberta")
