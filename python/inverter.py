@@ -245,6 +245,32 @@ def six_step_gates(sector, duty, carrier):
     return tuple(gates)
 
 
+def six_step_duties(sector, duty):
+    """
+    Duty cycle de cada fase no six-step, na mesma convencao do firmware
+    (fase centrada em 50%, CCR = 625 de 1250), para comparar com o ensaio:
+
+      fase alta      : 0.5 + duty/2
+      fase baixa     : 0.5 - duty/2
+      fase flutuante : 0.5
+
+    Assim a diferenca alta - baixa e `duty`, a mesma tensao de linha media
+    (duty * Vdc) do esquema H_PWM-L_ON que six_step_gates aplica ao motor.
+    So converte o comando para comparacao; nao altera a modulacao simulada.
+
+    Retorna (da, db, dc).
+    """
+    duties = []
+    for state in SIX_STEP_TABLE[sector]:
+        if state == 1:
+            duties.append(0.5 + 0.5 * duty)
+        elif state == -1:
+            duties.append(0.5 - 0.5 * duty)
+        else:
+            duties.append(0.5)
+    return tuple(duties)
+
+
 def inverter_pole_voltages(inverter, gates, currents):
     """
     Tensao de polo de cada perna a partir do estado das chaves e do sentido
