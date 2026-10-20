@@ -2,6 +2,7 @@ from simulations import (
     simulation_bldc_malha_corrente_velocidade,
     simulation_dc_motor_malha_velocidade,
     simulation_dc_motor_malha_corrente_velocidade,
+    simulation_bldc_velocidade_vf,
     simulation_bldc_velocidade
 )
 from params import get_args
@@ -23,6 +24,7 @@ if __name__ == "__main__":
     elif motor_type == "bldc":
         # raise SystemExit(simulation_bldc_malha_corrente_velocidade(args))
         raise SystemExit(simulation_bldc_velocidade(args))
+        # raise SystemExit(simulation_bldc_velocidade_vf(args))
     else:
         raise SystemExit(
             f'Erro: tipo de motor desconhecido "{motor_type}" '
