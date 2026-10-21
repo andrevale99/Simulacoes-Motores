@@ -622,8 +622,8 @@ def simulation_bldc_velocidade(args):
     log_file.close()
     print(f"\n\nSimulacao concluida. Resultados em \"{args.filename}\".\n")
 
-    # print(f'\nPlot dos graficos de iabc, RPM e fft das correntes\n\n')
-    # plot_graficos(args.filename, motor_type="bldc")
+    print(f'\nPlot dos graficos de iabc, RPM e fft das correntes\n\n')
+    plot_graficos(args.filename, motor_type="bldc")
 
     return 0
 
