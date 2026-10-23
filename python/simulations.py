@@ -515,7 +515,7 @@ def simulation_bldc_velocidade(args):
     # PID de velocidade em pu: Kp = 5, Ki = 1, saida (duty) em [0, 1]
     # pi_omega = pid_controller_init(args.KpOmega, args.KiOmega, 0.0, dtOmega,
     #                                True, 0.0, True, 1.0)
-    pi_omega = pid_controller_init(args.KpOmega, args.KiOmega, 0.01, dtOmega,
+    pi_omega = pid_controller_init(args.KpOmega, args.KiOmega, args.KdOmega, dtOmega,
                                    True, 0.0, True, 1.0)
 
     t_next_omega = time_sim.t0
