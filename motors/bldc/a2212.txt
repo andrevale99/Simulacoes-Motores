@@ -23,14 +23,14 @@ P  = 7                # -         - numero de pares de polos
 Kt = 0.00909483       # N.m/A     - constante de torque
 
 # --- Parametros do SVPWM (chaveamento real do inversor) ---
-Fsw        = 10000    # Hz - frequencia de chaveamento
-PwmSamples = 75       # passos finos de simulacao por periodo Ts
+Fsw        = 20000    # Hz - frequencia de chaveamento
+PwmSamples = 10       # passos finos de simulacao por periodo Ts
                       # (maior = mais fiel ao chaveamento real, porem mais lento)
 
 # --- Parametros de tempo da simulacao ---
 Ti = 0.0              # s - tempo inicial
 Tf = 0.5              # s - tempo final
-Dt = 1e-6             # s - passo de integracao explicito
+Dt = 1e-4             # s - passo de integracao explicito
                       # (0.0 = automatico: dt = 1/Fsw / PwmSamples;
                       # informe um valor > 0 para sobrescrever o
                       # calculo automatico)
