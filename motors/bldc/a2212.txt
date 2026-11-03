@@ -36,7 +36,7 @@ Dt = 1e-4             # s - passo de integracao explicito
                       # calculo automatico)
 
 # --- injecao da nova carga Tl ---
-Ttl = 0.0           # s - tempo de injecao da nova carga
+Ttl = 0.0          # s - tempo de injecao da nova carga
 Tlnew = 0.0         # N.m - Torque da nova carga
 
 # --- Barramento CC ---
