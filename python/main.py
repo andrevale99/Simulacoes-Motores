@@ -1,7 +1,5 @@
 from simulations import (
     simulation_bldc_malha_corrente_velocidade,
-    simulation_dc_motor_malha_velocidade,
-    simulation_dc_motor_malha_corrente_velocidade,
     simulation_bldc_velocidade_vf,
     simulation_bldc_velocidade
 )
@@ -19,8 +17,7 @@ if __name__ == "__main__":
     motor_type = args.motor.lower()
 
     if motor_type == "dc":
-        # raise SystemExit(simulation_dc_motor_malha_corrente_velocidade(args))
-        raise SystemExit(simulation_dc_motor_malha_velocidade(args))
+        raise SystemExit("Erro: nao ha simulacao disponivel para o motor DC.")
     elif motor_type == "bldc":
         # raise SystemExit(simulation_bldc_malha_corrente_velocidade(args))
         raise SystemExit(simulation_bldc_velocidade(args))

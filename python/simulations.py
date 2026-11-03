@@ -16,18 +16,34 @@ from inverter import (
 )
 from transforms import clarke_transform, park_transform, park_inverse_transform
 from bldc import BLDCMotor, TimeSimulation, bldc_step, bldc_step_switched
-from dc_motor import (
-    DCMotor,
-    dc_motor_step,
-    dc_motor_electrical_step,
-    dc_motor_mechanical_step,
-)
 from auxs import rpm_to_rads, TWO_PI
 from progressbar import progress_bar_init, progress_bar_update, progress_bar_finish
 from vf_ramp import VfRamp
 
 # ajustar conforme os limites reais do projeto original (nao enviados)
 PI_IQ_MIN, PI_IQ_MAX = -50.0, 50.0
+
+# Alinhamento da comutacao six-step com a FCEM do bldc.py (equivalente ao
+# posicionamento dos sensores Hall). No bldc.py, a FCEM de cada fase e
+# f = -trapezoidal(theta_e + phi), e a tabela de six_step_commutation()
+# assume o setor 1 em 0-60 graus. Para torque positivo, as chaves devem
+# comutar em theta_e = 30, 90, 150... graus, o que equivale a somar 150 graus
+# (5*pi/6) ao angulo antes de buscar o setor. Medido por varredura em
+# 0-360 graus: maximo torque exatamente em 150 graus.
+SIX_STEP_THETA_OFFSET = 5.0 * math.pi / 6.0
+
+# Partida em rampa V/f do six-step (usada quando MalhaAberta = true), com os
+# valores do firmware (ENV_MOTOR_*). u e o duty da fase alta, em pu de Vdc
+# (u = 1 -> tensao de linha = Vdc). Ao atingir VF_RAMP_END_RPM, passa para o
+# PI de velocidade.
+VF_ALIGN_U = 0.15          # pu - amplitude do alinhamento
+VF_ALIGN_T = 0.5           # s - cada um dos 2 passos do alinhamento
+VF_START_RPM = 60.0        # rpm mecanico - inicio da rampa
+VF_RAMP_END_RPM = 500.0    # rpm mecanico - fim da rampa: entra na malha fechada
+VF_RAMP_RPM_PER_S = 300.0  # rpm/s - taxa da rampa
+VF_U_OFFSET = 0.10         # pu - amplitude em 0 rpm
+VF_U_PER_RPM = 0.0002      # pu/rpm - inclinacao V/f
+VF_U_MAX = 0.50            # pu - limite da amplitude
 
 def simulation_bldc_malha_corrente_velocidade(args):
     motor = BLDCMotor(
@@ -147,298 +163,24 @@ def simulation_bldc_malha_corrente_velocidade(args):
 
     progress_bar_finish(pb)
     log_file.close()
+
+    # Libera as variaveis que nao serao mais usadas (so args.filename segue
+    # para o plot). As do laco so existem se ele executou ao menos um passo.
+    del (motor, pwm, dt, time_sim, total_steps, inverter, vdc_max, vdc_min,
+         dtOmega, dtId, dtIq, id_ref, omega_ref, pi_omega, pi_d, pi_q,
+         t_next_omega, t_next_id, t_next_iq, iq_ref_hold, vd_ref_hold,
+         vq_ref_hold, log_file, pb)
+    if "Vabc" in locals():
+        del (k, t, iq_ref, i_alpha, i_beta, i_d, i_q, vd_ref, vq_lim, vq_ref,
+             v_alpha, v_beta, duty_a, duty_b, duty_c, carrier,
+             gate_a, gate_b, gate_c, Vabc)
+
     print(f"\n\nSimulacao concluida. Resultados em \"{args.filename}\".\n")
 
     print(f'\nPlot dos graficos de iabc, Te, idq, RPM e fft das correntes\n\n')
     plot_graficos(args.filename, motor_type="bldc")
 
     return 0
-
-
-def simulation_dc_motor_malha_corrente_velocidade(args):
-    """
-    Simulacao de um motor DC com controle em cascata:
-
-        malha externa de VELOCIDADE (PID) -> referencia de corrente (ia_ref)
-        malha interna de CORRENTE  (PID) -> referencia de tensao de armadura (V)
-
-    Diferente da simulacao BLDC, nao ha SVPWM/inversor trifasico: a
-    tensao de armadura e aplicada diretamente (fonte de tensao ideal
-    saturada em +-Vdc), como em um acionamento por ponte H de um
-    unico braco. Campos opcionais (KdOmega, KdId, dtOmega, dtCurrent,
-    ia_max) sao lidos com getattr() para nao quebrar caso ainda nao
-    existam no params.py.
-    """
-    motor = DCMotor(
-        R=args.R, L=args.L, Ke=args.Ke, Kt=args.Kt,
-        J=args.J, B=args.B,
-    )
-
-    if args.Dt > 0.0:
-        dt = args.Dt
-    else:
-        dt = 1e-6
-
-    time_sim = TimeSimulation(t0=args.Ti, tf=args.Tf, dt=dt)
-    total_steps = int((time_sim.tf - time_sim.t0)/dt + 0.5) + 1
-
-    print(f"Passo de integracao (dt)    = {dt:.9e} s")
-    print(f"Total de passos da simulacao ~ {total_steps}\n")
-
-    if total_steps > 5_000_000:
-        print(f"Aviso: {total_steps} passos -- a simulacao pode demorar bastante.")
-
-    Vdc = args.Vdc
-    ia_max = getattr(args, "ia_max", 50.0)
-
-    dtOmega = getattr(args, "dtOmega", 1e-3)
-    dtCurrent = getattr(args, "dtCurrent", 50e-6)
-
-    KdOmega = getattr(args, "KdOmega", 0.0)
-    KdId = getattr(args, "KdId", 0.0)
-
-    omega_ref = rpm_to_rads(args.rpm)
-    print(f"rpm_ref = {args.rpm:.2f} RPM")
-    print(f"omega_ref = {omega_ref:.6f} rad/s")
-
-    pi_omega = pid_controller_init(args.KpOmega, args.KiOmega, KdOmega, dtOmega,
-                                   True, -ia_max, True, ia_max)
-    pi_current = pid_controller_init(args.KpId, args.KiId, KdId, dtCurrent,
-                                     True, -Vdc, True, Vdc)
-
-    t_next_omega = t_next_current = time_sim.t0
-    ia_ref_hold = v_ref_hold = 0.0
-
-    try:
-        log_file = open(args.filename, "w")
-    except OSError as e:
-        print(f"Erro ao criar o arquivo de log: {e}")
-        return 1
-
-    log_file.write("time;V;ia;e;Te;omega_r;theta_r;ia_ref\n")
-
-    pb = progress_bar_init(time_sim.t0, time_sim.tf, time_sim.dt)
-
-    for k in range(total_steps):
-        t = time_sim.t0 + k*dt
-        if t > time_sim.tf:
-            break
-
-        if t >= args.Ttl:
-            args.Tl = args.Tlnew
-
-        # A. malha externa de velocidade (retencao de ultima ordem)
-        if t >= t_next_omega:
-            ia_ref_hold = pid_controller_update(pi_omega, omega_ref, motor.omega_r)
-            t_next_omega += dtOmega
-        ia_ref = ia_ref_hold
-
-        # B. malha interna de corrente (retencao de ultima ordem)
-        if t >= t_next_current:
-            v_ref_hold = pid_controller_update(pi_current, ia_ref, motor.ia)
-            t_next_current += dtCurrent
-        V = v_ref_hold
-
-        # C. planta
-        dc_motor_step(V, motor, dt, args.Tl)
-
-        progress_bar_update(pb, t)
-
-        log_file.write(
-            f"{t:.6f};{V:.4f};{motor.ia:.6f};{motor.e:.6f};"
-            f"{motor.Te:.6f};{motor.omega_r:.6f};{motor.theta_r:.6f};"
-            f"{ia_ref:.6f}\n"
-        )
-
-    progress_bar_finish(pb)
-    log_file.close()
-    print(f"\n\nSimulacao concluida. Resultados em \"{args.filename}\".\n")
-
-    print(f'\nPlot dos graficos de ia, Te, RPM, theta_r\n\n')
-    plot_graficos(args.filename, motor_type="dc")
-
-    return 0
-
-def simulation_dc_motor_malha_velocidade(args):
-    """
-    Simulacao de um motor DC com controle somente de velocidade:
-
-        referencia de velocidade -> PID de velocidade -> tensao de armadura
-
-    A saida do PID de velocidade e aplicada diretamente ao motor,
-    limitada entre -Vdc e +Vdc.
-    """
-
-    motor = DCMotor(
-        R=args.R,
-        L=args.L,
-        Ke=args.Ke,
-        Kt=args.Kt,
-        J=args.J,
-        B=args.B,
-    )
-
-    if args.Dt > 0.0:
-        dt = args.Dt
-    else:
-        dt = 1e-6
-
-    time_sim = TimeSimulation(
-        t0=args.Ti,
-        tf=args.Tf,
-        dt=dt
-    )
-
-    total_steps = int(
-        (time_sim.tf - time_sim.t0) / dt + 0.5
-    ) + 1
-
-    print(f"Passo de integracao (dt)    = {dt:.9e} s")
-    print(f"Total de passos da simulacao ~ {total_steps}\n")
-
-    if total_steps > 5_000_000:
-        print(
-            f"Aviso: {total_steps} passos -- "
-            "a simulacao pode demorar bastante."
-        )
-
-    Vdc = args.Vdc
-
-    # Periodo de atualizacao do controlador de velocidade
-    dtOmega = getattr(args, "dtOmega", 1e-3)
-
-    # Ganho derivativo opcional
-    KdOmega = getattr(args, "KdOmega", 0.0)
-
-    # Referencia de velocidade
-    omega_ref = rpm_to_rads(args.rpm)
-
-    print(f"rpm_ref = {args.rpm:.2f} RPM")
-    print(f"omega_ref = {omega_ref:.6f} rad/s")
-
-    # PID de velocidade
-    # A saida agora e diretamente a tensao V
-    pi_omega = pid_controller_init(
-        args.KpOmega,
-        args.KiOmega,
-        KdOmega,
-        dtOmega,
-        True,
-        0,
-        True,
-        Vdc
-    )
-
-    t_next_omega = time_sim.t0
-
-    V_hold = 0.0
-
-    try:
-        log_file = open(args.filename, "w")
-    except OSError as e:
-        print(f"Erro ao criar o arquivo de log: {e}")
-        return 1
-
-    log_file.write(
-        "time;V;ia;e;Te;omega_r;theta_r\n"
-    )
-
-    pb = progress_bar_init(
-        time_sim.t0,
-        time_sim.tf,
-        time_sim.dt
-    )
-
-    for k in range(total_steps):
-
-        t = time_sim.t0 + k * dt
-
-        if t > time_sim.tf:
-            break
-
-        if t >= args.Ttl:
-            args.Tl = args.Tlnew
-
-        # Malha de velocidade
-        if t >= t_next_omega:
-
-            V_hold = pid_controller_update(
-                pi_omega,
-                omega_ref,
-                motor.omega_r
-            )
-
-            t_next_omega += dtOmega
-
-        # Tensao aplicada diretamente ao motor
-        V = V_hold
-
-        # Planta: dinamica eletrica (V -> ia, e, Te) seguida da
-        # dinamica mecanica (Te, Tl -> omega_r, theta_r)
-        dc_motor_electrical_step(
-            V,
-            motor,
-            dt
-        )
-
-        dc_motor_mechanical_step(
-            motor,
-            dt,
-            args.Tl
-        )
-
-        progress_bar_update(pb, t)
-
-        log_file.write(
-            f"{t:.6f};"
-            f"{V:.4f};"
-            f"{motor.ia:.6f};"
-            f"{motor.e:.6f};"
-            f"{motor.Te:.6f};"
-            f"{motor.omega_r:.6f};"
-            f"{motor.theta_r:.6f}\n"
-        )
-
-    progress_bar_finish(pb)
-    log_file.close()
-
-    print(
-        f'\n\nSimulacao concluida. '
-        f'Resultados em "{args.filename}".\n'
-    )
-
-    print(
-        '\nPlot dos graficos de ia, Te, RPM, theta_r\n\n'
-    )
-
-    plot_graficos(
-        args.filename,
-        motor_type="dc"
-    )
-
-    return 0
-
-# Alinhamento da comutacao six-step com a FCEM do bldc.py (equivalente ao
-# posicionamento dos sensores Hall). No bldc.py, a FCEM de cada fase e
-# f = -trapezoidal(theta_e + phi), e a tabela de six_step_commutation()
-# assume o setor 1 em 0-60 graus. Para torque positivo, as chaves devem
-# comutar em theta_e = 30, 90, 150... graus, o que equivale a somar 150 graus
-# (5*pi/6) ao angulo antes de buscar o setor. Medido por varredura em
-# 0-360 graus: maximo torque exatamente em 150 graus.
-SIX_STEP_THETA_OFFSET = 5.0 * math.pi / 6.0
-
-# Partida em rampa V/f do six-step (usada quando MalhaAberta = true), com os
-# valores do firmware (ENV_MOTOR_*). u e o duty da fase alta, em pu de Vdc
-# (u = 1 -> tensao de linha = Vdc). Ao atingir VF_RAMP_END_RPM, passa para o
-# PI de velocidade.
-VF_ALIGN_U = 0.15          # pu - amplitude do alinhamento
-VF_ALIGN_T = 0.5           # s - cada um dos 2 passos do alinhamento
-VF_START_RPM = 60.0        # rpm mecanico - inicio da rampa
-VF_RAMP_END_RPM = 500.0    # rpm mecanico - fim da rampa: entra na malha fechada
-VF_RAMP_RPM_PER_S = 300.0  # rpm/s - taxa da rampa
-VF_U_OFFSET = 0.10         # pu - amplitude em 0 rpm
-VF_U_PER_RPM = 0.0002      # pu/rpm - inclinacao V/f
-VF_U_MAX = 0.50            # pu - limite da amplitude
 
 
 def simulation_bldc_velocidade(args):
@@ -559,8 +301,8 @@ def simulation_bldc_velocidade(args):
             break
 
         # Para facilitar a vida, sem nova carga
-        # if t >= args.Ttl:
-        #     args.Tl = args.Tlnew
+        if t >= args.Ttl:
+            args.Tl = args.Tlnew
 
         motor.theta_e = (motor.P * motor.theta_r) % TWO_PI
 
@@ -620,6 +362,21 @@ def simulation_bldc_velocidade(args):
 
     progress_bar_finish(pb)
     log_file.close()
+
+    # Libera as variaveis que nao serao mais usadas (so args.filename segue
+    # para o plot). As do laco so existem se ele executou o trecho em que
+    # sao criadas.
+    del (motor, pontos_ref, ref_tempos, ref_omegas, omega_alvo, omega_ref,
+         Ts, dt, time_sim, total_steps, inverter, dtOmega, t_i, rpm_i,
+         pi_omega, t_next_omega, duty_ref, omega_cmd, omega_cmd_rate,
+         rampa_troca, vf, log_file, pb)
+    if "Vabc" in locals():
+        del k, t, sector, carrier, gates, da, db, dc, Vabc
+    if "alvo" in locals():
+        del alvo
+    if "passo" in locals():
+        del passo
+
     print(f"\n\nSimulacao concluida. Resultados em \"{args.filename}\".\n")
 
     print(f'\nPlot dos graficos de iabc, RPM e fft das correntes\n\n')
