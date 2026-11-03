@@ -91,6 +91,9 @@ def bldc_step_switched(gates, inverter, motor, time, Tl, trapezoidal_back_emf_fl
         vn      = media de u_k em C            (tensao do neutro)
         di_k/dt = (u_k - vn) / (L - M)        (soma das di_k = 0)
 
+    Integracao: Euler explicito. Todas as derivadas (correntes, velocidade
+    e posicao) sao avaliadas com o estado do inicio do passo (instante k).
+
     Parametros
     ----------
     gates : (ga, gb, gc), com +1 (chave superior), -1 (inferior) ou 0 (ambas
@@ -120,6 +123,10 @@ def bldc_step_switched(gates, inverter, motor, time, Tl, trapezoidal_back_emf_fl
 
     iabc = motor.iabc
     eabc = motor.eabc
+
+    # --- torque e derivada da velocidade com o estado do instante k ---
+    Te = motor.Kt * sum(iabc[k]*fabc[k] for k in range(3))
+    domega_r = (Te - Tl - motor.omega_r*motor.B) / motor.J
 
     # --- 1) tensao de polo de cada perna (chaves e diodos) ---
     poles, diode = inverter_pole_voltages(inverter, gates, iabc)
@@ -166,12 +173,11 @@ def bldc_step_switched(gates, inverter, motor, time, Tl, trapezoidal_back_emf_fl
         elif len(vivas) < 2:
             iabc[0] = iabc[1] = iabc[2] = 0.0
 
-    # --- 6) torque e dinamica mecanica (igual ao bldc_step) ---
-    motor.Te = motor.Kt * sum(iabc[k]*fabc[k] for k in range(3))
-
-    domega_r = (motor.Te - Tl - motor.omega_r*motor.B) / motor.J
-    motor.omega_r += domega_r * dt
+    # --- 6) dinamica mecanica (Euler explicito: posicao com a velocidade
+    #        do instante k, velocidade com o torque do instante k) ---
+    motor.Te = Te
     motor.theta_r += motor.omega_r * dt
+    motor.omega_r += domega_r * dt
 
     if vn is None:
         return list(eabc)
