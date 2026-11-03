@@ -325,8 +325,7 @@ def _plot_graficos_bldc(data, pasta_saida):
 def _plot_graficos_dc(data, pasta_saida):
     """
     Graficos para o motor DC: torque, corrente, velocidade e posicao.
-    Espera as colunas geradas por dc_motor_log_data() /
-    simulation_dc_motor_malha_corrente_velocidade():
+    Espera as colunas geradas por dc_motor_log_data():
         time;V;ia;e;Te;omega_r;theta_r;ia_ref
     """
     str_time = "time"
