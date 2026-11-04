@@ -3,7 +3,6 @@ import math
 from dataclasses import dataclass
 
 from params import get_args
-from graficos import plot_graficos
 from pid_controller import pid_controller_init, pid_controller_update
 from svpwm import svpwm_init, svpwm_modulate, svpwm_carrier, svpwm_gate_state
 from inverter import (
@@ -176,9 +175,6 @@ def simulation_bldc_malha_corrente_velocidade(args):
              gate_a, gate_b, gate_c, Vabc)
 
     print(f"\n\nSimulacao concluida. Resultados em \"{args.filename}\".\n")
-
-    print(f'\nPlot dos graficos de iabc, Te, idq, RPM e fft das correntes\n\n')
-    plot_graficos(args.filename, motor_type="bldc")
 
     return 0
 
@@ -378,9 +374,6 @@ def simulation_bldc_velocidade(args):
         del passo
 
     print(f"\n\nSimulacao concluida. Resultados em \"{args.filename}\".\n")
-
-    print(f'\nPlot dos graficos de iabc, RPM e fft das correntes\n\n')
-    plot_graficos(args.filename, motor_type="bldc")
 
     return 0
 
