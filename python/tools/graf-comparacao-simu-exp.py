@@ -7,12 +7,15 @@ Compara o ensaio de bancada (log do firmware) com a simulacao:
              coluna 2: duty cycle de cada fase da simulacao (da, db, dc);
                        em csv antigos, sem essas colunas, usa duty_ref
              com --fase, desenha so o duty da fase escolhida
-             com --t-inicial/--t-final, corta os dados nos tempos mais
+             com -i/--t-inicial e -f/--t-final, corta os dados nos tempos mais
              proximos dos valores dados
              com --sem-referencia, nao desenha a linha de referencia de RPM
+             fundo vermelho claro na malha aberta e verde claro na malha
+             fechada: a troca e o fim da rampa V/f (coluna vf da simulacao)
+             ou o tempo dado com --fundo T
 
 Uso:
-    python comparacao_rpm_duty.py <teste.csv> <simulacao.csv> <saida.pdf> [--open-loop] [--fase {a,b,c}] [--t-inicial T] [--t-final T] [--sem-referencia]
+    python comparacao_rpm_duty.py <teste.csv> <simulacao.csv> <saida.pdf> [--open-loop] [--fase {a,b,c}] [-i T] [-f T] [--sem-referencia] [--fundo T]
 
     ex.: python comparacao_rpm_duty.py teste04/log-1150.csv simulacao-1150.csv teste04/comparacao-1150.pdf
 """
@@ -27,8 +30,11 @@ plt.rcParams.update({
     "text.usetex": True,
     "font.family": "serif",
     "mathtext.fontset": "cm",
-    "font.serif": ["cmr10", "DejaVu Serif", "serif"],
+    "font.serif": ["cmr10"],
     "axes.formatter.use_mathtext": True,
+    'pdf.compression': 9,
+    'path.simplify': True,
+    'path.simplify_threshold' : 0.6,
 
     # Fontes
     "font.size": 18,
@@ -138,11 +144,15 @@ def _cortar(df, col_t, t_inicial=None, t_final=None):
 
 
 def plot_comparacao(teste_csv, sim_csv, saida, open_loop=False, fase=None,
-                    t_inicial=None, t_final=None, referencia=True):
+                    t_inicial=None, t_final=None, referencia=True, fundo=None):
     teste = carregar_teste(teste_csv)
     sim = carregar_simulacao(sim_csv)
     # Fim da rampa V/f antes do corte (pode ficar fora de [t_inicial, t_final])
-    t_lim = None if open_loop else _fim_rampa(sim)
+    # (--fundo T fixa o instante da troca a mao, mesmo com open_loop)
+    if fundo is not None:
+        t_lim = fundo
+    else:
+        t_lim = None if open_loop else _fim_rampa(sim)
     teste = _cortar(teste, "t", t_inicial, t_final)
     sim = _cortar(sim, "time", t_inicial, t_final)
     rpm_alvo = _rpm_alvo(teste_csv)
@@ -220,17 +230,20 @@ if __name__ == "__main__":
                         help="ensaio em malha aberta: nao pinta o fundo da rampa V/f")
     parser.add_argument("--fase", choices="abc",
                         help="desenha so o duty desta fase (padrao: as 3 fases)")
-    parser.add_argument("--t-inicial", type=float, metavar="T",
+    parser.add_argument("-i", "--t-inicial", type=float, metavar="T",
                         help="tempo inicial dos graficos [s]; usa o instante mais proximo existente")
-    parser.add_argument("--t-final", type=float, metavar="T",
+    parser.add_argument("-f", "--t-final", type=float, metavar="T",
                         help="tempo final dos graficos [s]; usa o instante mais proximo existente")
     parser.add_argument("--sem-referencia", action="store_true",
                         help="nao desenha a linha de referencia de RPM")
+    parser.add_argument("--fundo", type=float, metavar="T",
+                        help="instante [s] da troca malha aberta -> fechada no fundo "
+                             "(padrao: fim da rampa V/f da simulacao)")
     args = parser.parse_args()
 
     if (args.t_inicial is not None and args.t_final is not None
             and args.t_inicial >= args.t_final):
-        parser.error("--t-inicial deve ser menor que --t-final")
+        parser.error("-i deve ser menor que -f")
 
     for arq in (args.teste, args.simulacao):
         if not os.path.isfile(arq):
@@ -238,4 +251,4 @@ if __name__ == "__main__":
 
     plot_comparacao(args.teste, args.simulacao, args.saida, args.open_loop,
                     args.fase, args.t_inicial, args.t_final,
-                    not args.sem_referencia)
+                    not args.sem_referencia, args.fundo)

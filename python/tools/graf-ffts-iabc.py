@@ -6,8 +6,10 @@ Antes da FFT, cada corrente tem a media (componente DC) removida e passa
 por uma janela de Hann; a amplitude e corrigida pelo ganho da janela, de
 modo que um seno de amplitude A aparece com pico ~A.
 
+Com -i/-f, corta os dados nos instantes mais proximos dos tempos dados.
+
 Uso:
-    python graf-ffts-iabc.py <simulacao.csv> <saida.pdf>
+    python graf-ffts-iabc.py <simulacao.csv> <saida.pdf> [-i T] [-f T]
 
     ex.: python graf-ffts-iabc.py simulacao-1150.csv img/fft-iabc-1150.pdf
 """
@@ -22,8 +24,11 @@ plt.rcParams.update({
     "text.usetex": True,
     "font.family": "serif",
     "mathtext.fontset": "cm",
-    "font.serif": ["cmr10", "DejaVu Serif", "serif"],
+    "font.serif": ["cmr10"],
     "axes.formatter.use_mathtext": True,
+    'pdf.compression': 9,
+    'path.simplify': True,
+    'path.simplify_threshold' : 0.6,
 
     # Fontes
     "font.size": 18,
@@ -62,8 +67,20 @@ def calcular_fft(sinal, Fs):
     return frequencia, amplitude
 
 
-def plot_fft_iabc(sim_csv, saida):
+def _cortar(df, col_t, t_inicial=None, t_final=None):
+    """
+    Mantem as linhas entre os instantes de `col_t` mais proximos de t_inicial
+    e de t_final (fora do intervalo dos dados, fica o primeiro/ultimo instante
+    disponivel). Limite None nao corta aquele lado.
+    """
+    ini = df.index[0] if t_inicial is None else (df[col_t] - t_inicial).abs().idxmin()
+    fim = df.index[-1] if t_final is None else (df[col_t] - t_final).abs().idxmin()
+    return df.loc[ini:fim]
+
+
+def plot_fft_iabc(sim_csv, saida, t_inicial=None, t_final=None):
     data = pd.read_csv(sim_csv, sep=";")
+    data = _cortar(data, "time", t_inicial, t_final)
     tempo = data["time"].to_numpy()
 
     # A simulacao usa passo fixo: Fs = 1/dt
@@ -103,9 +120,17 @@ if __name__ == "__main__":
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("simulacao", help="csv da simulacao (ex.: simulacao-1150.csv)")
     parser.add_argument("saida", help="arquivo pdf a ser salvo (inclui o diretorio)")
+    parser.add_argument("-i", "--t-inicial", type=float, metavar="T",
+                        help="tempo inicial dos graficos [s]; usa o instante mais proximo existente")
+    parser.add_argument("-f", "--t-final", type=float, metavar="T",
+                        help="tempo final dos graficos [s]; usa o instante mais proximo existente")
     args = parser.parse_args()
+
+    if (args.t_inicial is not None and args.t_final is not None
+            and args.t_inicial >= args.t_final):
+        parser.error("-i deve ser menor que -f")
 
     if not os.path.isfile(args.simulacao):
         parser.error(f'arquivo "{args.simulacao}" nao encontrado')
 
-    plot_fft_iabc(args.simulacao, args.saida)
+    plot_fft_iabc(args.simulacao, args.saida, args.t_inicial, args.t_final)
