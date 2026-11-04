@@ -45,6 +45,18 @@ VF_U_PER_RPM = 0.0002      # pu/rpm - inclinacao V/f
 VF_U_MAX = 0.50            # pu - limite da amplitude
 
 def simulation_bldc_malha_corrente_velocidade(args):
+    """
+    Controle FOC do motor BLDC em cascata, com SVPWM:
+
+        PI de velocidade -> iq_ref -> PIs de id e iq -> (vd, vq) -> SVPWM
+
+    Com MalhaAberta = true, a partida e feita em rampa V/f (VF_*): o vetor de
+    tensao vem da VfRamp (u = 1 -> |v| = Vdc/sqrt(3), limite da regiao linear
+    do SVPWM), sem usar a posicao do rotor. Ao atingir VF_RAMP_END_RPM, passa
+    para o FOC sem degrau: os integradores dos PIs partem da tensao (vd, vq) e
+    da corrente iq do instante da troca, e a referencia de velocidade sai da
+    velocidade medida e vai em rampa (VF_RAMP_RPM_PER_S) ate args.rpm.
+    """
     motor = BLDCMotor(
         R=args.R, L=args.L, M=args.M, Ke=args.Ke,
         J=args.J, B=args.B, P=args.P, Kt=args.Kt,
@@ -92,6 +104,25 @@ def simulation_bldc_malha_corrente_velocidade(args):
     t_next_omega = t_next_id = t_next_iq = time_sim.t0
     iq_ref_hold = vd_ref_hold = vq_ref_hold = 0.0
 
+    # Referencia de velocidade vista pelo PI. Sem V/f, e omega_ref desde o
+    # inicio; com V/f, parte da velocidade da troca e vai em rampa ate omega_ref
+    omega_cmd = omega_ref
+    omega_cmd_rate = rpm_to_rads(VF_RAMP_RPM_PER_S)    # rad/s por segundo
+    rampa_troca = False    # True enquanto omega_cmd ainda nao alcancou omega_ref
+
+    vf = None
+    if args.MalhaAberta:
+        # Alinhamento em 2 passos (90 e 0 graus eletricos) e rampa; o vetor
+        # de tensao vai direto para o SVPWM
+        vf = VfRamp(P=motor.P, v_base=vdc_max,
+                    u_align=VF_ALIGN_U, t_align=VF_ALIGN_T,
+                    rpm_start=VF_START_RPM, rpm_end=VF_RAMP_END_RPM,
+                    rpm_per_s=VF_RAMP_RPM_PER_S, u_offset=VF_U_OFFSET,
+                    u_per_rpm=VF_U_PER_RPM, u_max=VF_U_MAX)
+        print(f"Partida V/f: alinhamento 2 x {VF_ALIGN_T} s (u = {VF_ALIGN_U}), "
+              f"rampa de {VF_START_RPM:.0f} a {VF_RAMP_END_RPM:.0f} rpm "
+              f"a {VF_RAMP_RPM_PER_S:.0f} rpm/s")
+
     try:
         log_file = open(args.filename, "w")
     except OSError as e:
@@ -99,7 +130,7 @@ def simulation_bldc_malha_corrente_velocidade(args):
         return 1
 
     log_file.write("time;Va;Vb;Vc;ia;ib;ic;ea;eb;ec;id;iq;Te;theta_r;"
-                    "omega_r;iq_ref;vd_ref;vq_ref\n")
+                    "omega_r;iq_ref;vd_ref;vq_ref;vf;omega_cmd\n")
 
     pb = progress_bar_init(time_sim.t0, time_sim.tf, time_sim.dt)
 
@@ -111,33 +142,59 @@ def simulation_bldc_malha_corrente_velocidade(args):
         if t >= args.Ttl:
             args.Tl = args.Tlnew
 
-        # FOC em malha fechada
         motor.theta_e = motor.theta_r * motor.P
-
-        if t >= t_next_omega:
-            iq_ref_hold = pid_controller_update(pi_omega, omega_ref, motor.omega_r)
-            t_next_omega += dtOmega
-        iq_ref = iq_ref_hold
 
         i_alpha, i_beta = clarke_transform(*motor.iabc)
         i_d, i_q = park_transform(i_alpha, i_beta, motor.theta_e)
 
-        if t >= t_next_id:
-            vd_ref_hold = pid_controller_update(pi_d, id_ref, i_d)
-            t_next_id += dtId
-        vd_ref = vd_ref_hold
+        if vf is not None and not vf.finished:
+            # Partida em malha aberta: vetor de tensao da rampa V/f, sem usar
+            # a posicao do rotor (vd/vq e iq_ref so para o log)
+            v_alpha, v_beta = vf.update(dt, motor.omega_r)
+            vd_ref, vq_ref = park_transform(v_alpha, v_beta, motor.theta_e)
+            iq_ref = i_q
+            omega_cmd = rpm_to_rads(vf.rpm_cmd)
 
-        if t >= t_next_iq:
-            # Limite do VETOR de tensao (regiao linear do SVPWM, |v| <= Vdc/sqrt3)
-            # com prioridade ao eixo d: vq usa so a margem que vd deixou. O
-            # limite vai para o proprio PI, para o anti-windup usar o mesmo valor.
-            vq_lim = math.sqrt(max(vdc_max**2 - vd_ref**2, 0.0))
-            pi_q.output_min, pi_q.output_max = -vq_lim, vq_lim
-            vq_ref_hold = pid_controller_update(pi_q, iq_ref, i_q)
-            t_next_iq += dtIq
-        vq_ref = vq_ref_hold
+            if vf.finished:
+                # Transferencia sem degrau: a referencia parte da velocidade
+                # atual e os integradores comecam na tensao e na corrente atuais
+                print(f"\nRampa V/f concluida em t = {t:.4f} s "
+                      f"({motor.omega_r*60/TWO_PI:.1f} rpm, u = {vf.u:.3f}) "
+                      f"-> FOC em malha fechada.\n")
+                omega_cmd = motor.omega_r
+                rampa_troca = True
+                pi_omega.integral = iq_ref_hold = i_q
+                pi_d.integral = vd_ref_hold = vd_ref
+                pi_q.integral = vq_ref_hold = vq_ref
+                t_next_omega = t_next_id = t_next_iq = t + dt
+        else:
+            # FOC em malha fechada
+            if t >= t_next_omega:
+                if rampa_troca:
+                    # Depois da troca, vai em rampa ate omega_ref, nos 2 sentidos
+                    passo = omega_cmd_rate*dtOmega
+                    omega_cmd += max(-passo, min(omega_ref - omega_cmd, passo))
+                    rampa_troca = omega_cmd != omega_ref
+                iq_ref_hold = pid_controller_update(pi_omega, omega_cmd, motor.omega_r)
+                t_next_omega += dtOmega
+            iq_ref = iq_ref_hold
 
-        v_alpha, v_beta = park_inverse_transform(vd_ref, vq_ref, motor.theta_e)
+            if t >= t_next_id:
+                vd_ref_hold = pid_controller_update(pi_d, id_ref, i_d)
+                t_next_id += dtId
+            vd_ref = vd_ref_hold
+
+            if t >= t_next_iq:
+                # Limite do VETOR de tensao (regiao linear do SVPWM, |v| <= Vdc/sqrt3)
+                # com prioridade ao eixo d: vq usa so a margem que vd deixou. O
+                # limite vai para o proprio PI, para o anti-windup usar o mesmo valor.
+                vq_lim = math.sqrt(max(vdc_max**2 - vd_ref**2, 0.0))
+                pi_q.output_min, pi_q.output_max = -vq_lim, vq_lim
+                vq_ref_hold = pid_controller_update(pi_q, iq_ref, i_q)
+                t_next_iq += dtIq
+            vq_ref = vq_ref_hold
+
+            v_alpha, v_beta = park_inverse_transform(vd_ref, vq_ref, motor.theta_e)
 
         duty_a, duty_b, duty_c = svpwm_modulate(pwm, v_alpha, v_beta)
 
@@ -157,22 +214,29 @@ def simulation_bldc_malha_corrente_velocidade(args):
             f"{motor.iabc[0]:.4f};{motor.iabc[1]:.4f};{motor.iabc[2]:.4f};"
             f"{motor.eabc[0]:.4f};{motor.eabc[1]:.4f};{motor.eabc[2]:.4f};"
             f"{i_d:.4f};{i_q:.4f};{motor.Te:.4f};{motor.theta_r:.3f};"
-            f"{motor.omega_r:.4f};{iq_ref:.4f};{vd_ref:.4f};{vq_ref:.4f}\n"
+            f"{motor.omega_r:.4f};{iq_ref:.4f};{vd_ref:.4f};{vq_ref:.4f};"
+            f"{int(vf is not None and not vf.finished)};{omega_cmd:.4f}\n"
         )
 
     progress_bar_finish(pb)
     log_file.close()
 
     # Libera as variaveis que nao serao mais usadas (so args.filename segue
-    # para o plot). As do laco so existem se ele executou ao menos um passo.
+    # para o plot). As do laco so existem se ele executou o trecho em que
+    # sao criadas.
     del (motor, pwm, dt, time_sim, total_steps, inverter, vdc_max, vdc_min,
          dtOmega, dtId, dtIq, id_ref, omega_ref, pi_omega, pi_d, pi_q,
          t_next_omega, t_next_id, t_next_iq, iq_ref_hold, vd_ref_hold,
-         vq_ref_hold, log_file, pb)
+         vq_ref_hold, omega_cmd, omega_cmd_rate, rampa_troca, vf,
+         log_file, pb)
     if "Vabc" in locals():
-        del (k, t, iq_ref, i_alpha, i_beta, i_d, i_q, vd_ref, vq_lim, vq_ref,
+        del (k, t, iq_ref, i_alpha, i_beta, i_d, i_q, vd_ref, vq_ref,
              v_alpha, v_beta, duty_a, duty_b, duty_c, carrier,
              gate_a, gate_b, gate_c, Vabc)
+    if "vq_lim" in locals():
+        del vq_lim
+    if "passo" in locals():
+        del passo
 
     print(f"\n\nSimulacao concluida. Resultados em \"{args.filename}\".\n")
 
