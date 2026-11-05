@@ -18,8 +18,10 @@ Com --fundo, pinta o fundo de vermelho claro na malha aberta e de verde claro
 na malha fechada. A troca e o tempo dado (--fundo 2.47) ou, sem valor, o fim
 da rampa V/f lido da coluna vf do csv.
 
+Com --sem-ref, nao desenha as referencias id_ref e iq_ref na linha 2.
+
 Uso:
-    python graf-te-idq-rpm.py <simulacao.csv> <saida.pdf> [-i T] [-f T] [--fundo [T]]
+    python graf-te-idq-rpm.py <simulacao.csv> <saida.pdf> [-i T] [-f T] [--fundo [T]] [--sem-ref]
 
     ex.: python graf-te-idq-rpm.py simulacao-1150.csv img/te-idq-rpm-1150.pdf
 """
@@ -109,7 +111,8 @@ def _cortar(df, col_t, t_inicial=None, t_final=None):
     return df.loc[ini:fim]
 
 
-def plot_te_idq_rpm(sim_csv, saida, t_inicial=None, t_final=None, fundo=None):
+def plot_te_idq_rpm(sim_csv, saida, t_inicial=None, t_final=None, fundo=None,
+                    sem_ref=False):
     data = pd.read_csv(sim_csv, sep=";")
     # Instante da troca malha aberta -> fechada, antes do corte (pode ficar
     # fora de [t_inicial, t_final]); fundo None nao pinta
@@ -135,9 +138,10 @@ def plot_te_idq_rpm(sim_csv, saida, t_inicial=None, t_final=None, fundo=None):
     # Linha 2: correntes id e iq e suas referencias (cada par com a mesma cor)
     ax_i.plot(time, data["id"], color="C0", lw=0.8, label="$i_d$")
     ax_i.plot(time, data["iq"], color="C1", lw=0.8, label="$i_q$")
-    ax_i.axhline(ID_REF, color="red", lw=1.5, ls="--", label="$i_{d,ref}$")
-    ax_i.plot(time, data["iq_ref"], color="black", lw=1.5, ls="--",
-              label="$i_{q,ref}$")
+    if not sem_ref:
+        ax_i.axhline(ID_REF, color="red", lw=1.5, ls="--", label="$i_{d,ref}$")
+        ax_i.plot(time, data["iq_ref"], color="black", lw=1.5, ls="--",
+                  label="$i_{q,ref}$")
     ax_i.set_ylabel("A")
     ax_i.grid()
     ax_i.legend(loc="upper right", ncol=2)
@@ -190,6 +194,8 @@ if __name__ == "__main__":
                         help="pinta o fundo de vermelho claro (malha aberta) ate T [s] e de "
                              "verde claro (malha fechada) depois; sem T, usa o fim da rampa "
                              "V/f (coluna vf do csv)")
+    parser.add_argument("--sem-ref", action="store_true",
+                        help="nao desenha as referencias id_ref e iq_ref")
     args = parser.parse_args()
 
     if (args.t_inicial is not None and args.t_final is not None
@@ -200,4 +206,4 @@ if __name__ == "__main__":
         parser.error(f'arquivo "{args.simulacao}" nao encontrado')
 
     plot_te_idq_rpm(args.simulacao, args.saida, args.t_inicial, args.t_final,
-                    args.fundo)
+                    args.fundo, args.sem_ref)
