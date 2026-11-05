@@ -29,7 +29,7 @@ PwmSamples = 20       # passos finos de simulacao por periodo Ts
 
 # --- Parametros de tempo da simulacao ---
 Ti = 0.0              # s - tempo inicial
-Tf = 8                # s - tempo final
+Tf = 5                # s - tempo final
 Dt = 0                # s - passo de integracao explicito
                       # (0.0 = automatico: dt = 1/Fsw / PwmSamples;
                       # informe um valor > 0 para sobrescrever o
@@ -53,7 +53,7 @@ KpIq    = 1.885                 # ganho proporcional - malha de corrente iq
 KiIq    = 1570.796                      # ganho integral - malha de corrente iq
 
 # --- Referencia de velocidade ---
-rpm = 1700               # RPM (mecanico) - velocidade desejada
+rpm = 900               # RPM (mecanico) - velocidade desejada
 
 # --- Partida em malha aberta ---
 # true/yes/on
