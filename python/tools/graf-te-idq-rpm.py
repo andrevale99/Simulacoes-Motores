@@ -10,7 +10,8 @@ iq_ref). A simulacao usa id_ref = 0 fixo, que nao vai para o csv.
 
 A referencia de velocidade e o numero contido no nome do arquivo csv (ex.:
 simulacao-1150.csv -> 1150 RPM). Se o nome nao tiver numero, a linha de
-referencia nao e desenhada.
+referencia nao e desenhada. Depois da troca malha aberta -> fechada, desenha
+tambem a rampa de referencia (coluna omega_cmd do csv) ate a referencia.
 
 Com -i/-f, corta os dados nos instantes mais proximos dos tempos dados.
 
@@ -100,6 +101,39 @@ def _fundo(ax, t_ini, t_lim, t_fim):
     ax.set_xlim(t_ini, t_fim)
 
 
+def _rampa_ref(sim, rpm_alvo, tol=0.5):
+    """
+    Trecho (t_ini, t_fim) da rampa de referencia de velocidade depois da troca
+    malha aberta -> fechada: comeca no primeiro instante com vf = 0 e termina
+    quando omega_cmd chega a rpm_alvo (a menos de tol rpm); sem rpm_alvo, ou
+    se nao chegar, vai ate o fim dos dados. Retorna None se o csv nao tiver as
+    colunas vf e omega_cmd ou se nao houver troca.
+    """
+    if not {"vf", "omega_cmd"}.issubset(sim.columns):
+        return None
+    pos = sim[sim["vf"] == 0]
+    if pos.empty:
+        return None
+    t_ini = pos["time"].iloc[0]
+    t_fim = pos["time"].iloc[-1]
+    if rpm_alvo is not None:
+        cmd = pos["omega_cmd"] * 60.0 / (2 * np.pi)
+        chegou = pos["time"][(cmd - rpm_alvo).abs() <= tol]
+        if len(chegou) > 0:
+            t_fim = chegou.iloc[0]
+    return t_ini, t_fim
+
+
+def _plot_rampa(ax, sim, t_ini, t_fim):
+    """Reta da rampa de referencia, so na parte de [t_ini, t_fim] em `sim`."""
+    trecho = sim[(sim["time"] >= t_ini) & (sim["time"] <= t_fim)]
+    if len(trecho) < 2:
+        return
+    pontos = trecho.iloc[[0, -1]]
+    ax.plot(pontos["time"], pontos["omega_cmd"] * 60.0 / (2 * np.pi),
+            color="C3", lw=1.5, ls="--", label="Rampa de refer\\^encia")
+
+
 def _cortar(df, col_t, t_inicial=None, t_final=None):
     """
     Mantem as linhas entre os instantes de `col_t` mais proximos de t_inicial
@@ -117,6 +151,8 @@ def plot_te_idq_rpm(sim_csv, saida, t_inicial=None, t_final=None, fundo=None,
     # Instante da troca malha aberta -> fechada, antes do corte (pode ficar
     # fora de [t_inicial, t_final]); fundo None nao pinta
     t_lim = _fim_rampa(data) if fundo == "auto" else fundo
+    # Rampa de referencia depois da troca, tambem antes do corte
+    rampa = _rampa_ref(data, _rpm_alvo(sim_csv))
     data = _cortar(data, "time", t_inicial, t_final)
     time = data["time"]
     rpm = data["omega_r"] * 60.0 / (2 * np.pi)
@@ -131,6 +167,8 @@ def plot_te_idq_rpm(sim_csv, saida, t_inicial=None, t_final=None, fundo=None,
                        label=f"Refer\\^encia {rpm_alvo} RPM")
     else:
         print("aviso: nome do arquivo sem numero; referencia de RPM nao desenhada")
+    if rampa is not None:
+        _plot_rampa(ax_rpm, data, *rampa)
     ax_rpm.set_ylabel("RPM")
     ax_rpm.grid()
     ax_rpm.legend(loc="lower right")

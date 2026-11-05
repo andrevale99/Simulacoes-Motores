@@ -9,7 +9,10 @@ Compara o ensaio de bancada (log do firmware) com a simulacao:
              com --fase, desenha so o duty da fase escolhida
              com -i/--t-inicial e -f/--t-final, corta os dados nos tempos mais
              proximos dos valores dados
+             rampa de referencia da simulacao depois da troca malha aberta ->
+             fechada (coluna omega_cmd), ate a referencia de RPM
              com --sem-referencia, nao desenha a linha de referencia de RPM
+             nem a rampa
              fundo vermelho claro na malha aberta e verde claro na malha
              fechada: a troca e o fim da rampa V/f (coluna vf da simulacao)
              ou o tempo dado com --fundo T
@@ -107,7 +110,7 @@ def carregar_teste(arquivo):
 
 def carregar_simulacao(arquivo):
     colunas = pd.read_csv(arquivo, sep=";", nrows=0).columns
-    usar = ["time", "omega_r", "duty_ref"] + [c for c in ("vf", "da", "db", "dc") if c in colunas]
+    usar = ["time", "omega_r", "duty_ref"] + [c for c in ("vf", "omega_cmd", "da", "db", "dc") if c in colunas]
     df = pd.read_csv(arquivo, sep=";", usecols=usar)
     df = df.iloc[::PASSO_SIM].reset_index(drop=True)
     df["rpm"] = df["omega_r"] * 60.0 / (2 * np.pi)
@@ -132,6 +135,39 @@ def _fundo(ax, t_ini, t_lim, t_fim):
     ax.set_xlim(t_ini, t_fim)
 
 
+def _rampa_ref(sim, rpm_alvo, tol=0.5):
+    """
+    Trecho (t_ini, t_fim) da rampa de referencia de velocidade depois da troca
+    malha aberta -> fechada: comeca no primeiro instante com vf = 0 e termina
+    quando omega_cmd chega a rpm_alvo (a menos de tol rpm); sem rpm_alvo, ou
+    se nao chegar, vai ate o fim dos dados. Retorna None se o csv nao tiver as
+    colunas vf e omega_cmd ou se nao houver troca.
+    """
+    if not {"vf", "omega_cmd"}.issubset(sim.columns):
+        return None
+    pos = sim[sim["vf"] == 0]
+    if pos.empty:
+        return None
+    t_ini = pos["time"].iloc[0]
+    t_fim = pos["time"].iloc[-1]
+    if rpm_alvo is not None:
+        cmd = pos["omega_cmd"] * 60.0 / (2 * np.pi)
+        chegou = pos["time"][(cmd - rpm_alvo).abs() <= tol]
+        if len(chegou) > 0:
+            t_fim = chegou.iloc[0]
+    return t_ini, t_fim
+
+
+def _plot_rampa(ax, sim, t_ini, t_fim):
+    """Reta da rampa de referencia, so na parte de [t_ini, t_fim] em `sim`."""
+    trecho = sim[(sim["time"] >= t_ini) & (sim["time"] <= t_fim)]
+    if len(trecho) < 2:
+        return
+    pontos = trecho.iloc[[0, -1]]
+    ax.plot(pontos["time"], pontos["omega_cmd"] * 60.0 / (2 * np.pi),
+            color="C3", lw=1.5, ls="--", label="Rampa de refer\\^encia")
+
+
 def _cortar(df, col_t, t_inicial=None, t_final=None):
     """
     Mantem as linhas entre os instantes de `col_t` mais proximos de t_inicial
@@ -153,6 +189,8 @@ def plot_comparacao(teste_csv, sim_csv, saida, open_loop=False, fase=None,
         t_lim = fundo
     else:
         t_lim = None if open_loop else _fim_rampa(sim)
+    # Rampa de referencia depois da troca, tambem antes do corte
+    rampa = _rampa_ref(sim, _rpm_alvo(teste_csv))
     teste = _cortar(teste, "t", t_inicial, t_final)
     sim = _cortar(sim, "time", t_inicial, t_final)
     rpm_alvo = _rpm_alvo(teste_csv)
@@ -173,6 +211,8 @@ def plot_comparacao(teste_csv, sim_csv, saida, open_loop=False, fase=None,
     if referencia and rpm_alvo is not None:
         ax_rpm.axhline(rpm_alvo, color="C0", lw=2, ls=":",
                        label=f"Refer\\^encia {rpm_alvo} RPM")
+    if referencia and rampa is not None:
+        _plot_rampa(ax_rpm, sim, *rampa)
     ax_rpm.set_ylabel("RPM")
     ax_rpm.set_xlabel("Tempo [s]")
     ax_rpm.grid()
