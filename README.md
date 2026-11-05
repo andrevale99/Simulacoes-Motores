@@ -83,7 +83,7 @@ python main.py -c ../motors/bldc/a2212.txt --rpm 800 --Tf 1.0 -o saida.csv
 | Planta | `motor` (`bldc` ou `dc`) |
 | Motor | `R`, `L`, `M`, `Ke`, `Kt`, `J`, `B`, `P` (pares de polos), `Tl` |
 | Chaveamento | `Fsw`, `PwmSamples` |
-| Tempo | `Ti`, `Tf`, `Dt` (`Dt = 0` usa `1/Fsw / PwmSamples`) |
+| Tempo | `Tf`, `Dt` (`Dt = 0` usa `1/Fsw / PwmSamples`); a simulação sempre começa em t = 0 |
 | Degrau de carga | `Ttl` (instante), `Tlnew` (novo torque) |
 | Barramento | `Vdc` |
 | Controladores | `KpOmega`, `KiOmega`, `KdOmega`, `KpId`, `KiId`, `KdId`, `KpIq`, `KiIq`, `KdIq` |
