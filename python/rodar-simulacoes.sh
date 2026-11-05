@@ -30,7 +30,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 CONFIG="${CONFIG:-../motors/bldc/a2212.txt}"
-SAIDA="${SAIDA:-img/ganhos}"
+SAIDA="${SAIDA:-test/simulacoes}"
 GRAF_FLAGS="${GRAF_FLAGS:---fundo}"   # flags do grafico (ex.: "--fundo -i 2 -f 5")
 EXTRA="${EXTRA:-}"
 MOSTRAR="${MOSTRAR:-0}"               # 1 abre as janelas dos graficos
