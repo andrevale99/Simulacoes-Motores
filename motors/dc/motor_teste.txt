@@ -25,7 +25,6 @@ B  = 1.9e-3         # N.m/(rad/s) - coeficiente de amortecimento
 Tl = 0.0            # N.m       - torque de carga inicial
 
 # --- Parametros de tempo da simulacao ---
-Ti = 0.0            # s - tempo inicial
 Tf = 1.0            # s - tempo final
 Dt = 1e-5           # s - passo de integracao explicito
 

@@ -28,7 +28,6 @@ PwmSamples = 20       # passos finos de simulacao por periodo Ts
                       # (maior = mais fiel ao chaveamento real, porem mais lento)
 
 # --- Parametros de tempo da simulacao ---
-Ti = 0.0              # s - tempo inicial
 Tf = 5                # s - tempo final
 Dt = 0                # s - passo de integracao explicito
                       # (0.0 = automatico: dt = 1/Fsw / PwmSamples;
