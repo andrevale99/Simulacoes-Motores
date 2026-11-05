@@ -28,7 +28,7 @@ PwmSamples = 20       # passos finos de simulacao por periodo Ts
                       # (maior = mais fiel ao chaveamento real, porem mais lento)
 
 # --- Parametros de tempo da simulacao ---
-Tf = 7                # s - tempo final
+Tf = 8                # s - tempo final
 Dt = 0                # s - passo de integracao explicito
                       # (0.0 = automatico: dt = 1/Fsw / PwmSamples;
                       # informe um valor > 0 para sobrescrever o
@@ -39,12 +39,12 @@ Ttl = 0.0          # s - tempo de injecao da nova carga
 Tlnew = 0.0         # N.m - Torque da nova carga
 
 # --- Barramento CC ---
-Vdc = 11              # V - tensao do barramento CC
+Vdc = 8              # V - tensao do barramento CC
 
 # --- Controladores PI ---
 KpOmega = 20      	# ganho proporcional - malha de velocidade
 KiOmega = 40   	# ganho integral - malha de velocidade
-KdOmega = 1.0           # ganho derivativo - malha de velocidade
+KdOmega = 1           # ganho derivativo - malha de velocidade
 
 KpId    = 0         # ganho proporcional - malha de corrente id
 KiId    = 0      	# ganho integral - malha de corrente id
