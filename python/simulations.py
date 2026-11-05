@@ -75,7 +75,7 @@ def simulation_bldc_malha_corrente_velocidade(args):
     else:
         dt = pwm.Ts / args.PwmSamples
 
-    time_sim = TimeSimulation(t0=args.Ti, tf=args.Tf, dt=dt)
+    time_sim = TimeSimulation(t0=0.0, tf=args.Tf, dt=dt)
     total_steps = int((time_sim.tf - time_sim.t0)/dt + 0.5) + 1
 
     print(f"Periodo de chaveamento (Ts) = {pwm.Ts:.9e} s")
@@ -295,7 +295,7 @@ def simulation_bldc_velocidade(args):
     else:
         dt = Ts / args.PwmSamples
 
-    time_sim = TimeSimulation(t0=args.Ti, tf=args.Tf, dt=dt)
+    time_sim = TimeSimulation(t0=0.0, tf=args.Tf, dt=dt)
     total_steps = int((time_sim.tf - time_sim.t0)/dt + 0.5) + 1
 
     print(f"\nPeriodo de chaveamento (Ts) = {Ts:.9e} s")
@@ -474,7 +474,7 @@ def simulation_bldc_velocidade_vf(args):
     else:
         dt = Ts / args.PwmSamples
 
-    time_sim = TimeSimulation(t0=args.Ti, tf=args.Tf, dt=dt)
+    time_sim = TimeSimulation(t0=0.0, tf=args.Tf, dt=dt)
     total_steps = int((time_sim.tf - time_sim.t0)/dt + 0.5) + 1
 
     print(f"\nPeriodo de chaveamento (Ts) = {Ts:.9e} s")

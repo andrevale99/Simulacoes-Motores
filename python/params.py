@@ -26,7 +26,6 @@ DEFAULTS = {
     "PwmSamples": 175,
 
     # Tempo de simulacao
-    "Ti": 0.0,
     "Tf": 0.5,
     "Dt": 1e-6,
 
@@ -67,7 +66,7 @@ TYPES = {
     "R": float, "L": float, "M": float, "Ke": float, "J": float, "B": float,
     "Tl": float, "P": int, "Kt": float,
     "Fsw": float, "PwmSamples": int,
-    "Ti": float, "Tf": float, "Dt": float,
+    "Tf": float, "Dt": float,
     "Ttl": float, "Tlnew": float,
     "Vdc": float,
     "KpOmega": float, "KiOmega": float, "KdOmega": float,
@@ -237,7 +236,6 @@ def build_arg_parser():
 
     # Tempo
     g_time = parser.add_argument_group("Parametros de tempo")
-    g_time.add_argument("--Ti", type=float, default=None, help="s - tempo inicial")
     g_time.add_argument("--Tf", type=float, default=None, help="s - tempo final")
     g_time.add_argument("-d", "--dt", dest="Dt", type=float, default=None,
                          help="s - passo de integracao explicito (0 = automatico)")

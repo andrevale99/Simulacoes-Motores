@@ -10,7 +10,7 @@ GRUPOS_PARAMETROS = [
     ("Planta", ["motor"]),
     ("Motor", ["R", "L", "M", "Ke", "Kt", "J", "B", "P", "Tl"]),
     ("Chaveamento", ["Fsw", "PwmSamples"]),
-    ("Tempo", ["Ti", "Tf", "Dt"]),
+    ("Tempo", ["Tf", "Dt"]),
     ("Injecao de carga", ["Ttl", "Tlnew"]),
     ("Barramento CC", ["Vdc"]),
     ("Controladores PID", ["KpOmega", "KiOmega", "KdOmega",
