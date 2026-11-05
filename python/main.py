@@ -68,8 +68,8 @@ if __name__ == "__main__":
     if motor_type == "dc":
         raise SystemExit("Erro: nao ha simulacao disponivel para o motor DC.")
     elif motor_type == "bldc":
-        simulacao = simulation_bldc_malha_corrente_velocidade
-        # simulacao = simulation_bldc_velocidade
+        # simulacao = simulation_bldc_malha_corrente_velocidade
+        simulacao = simulation_bldc_velocidade
         # simulacao = simulation_bldc_velocidade_vf
     else:
         raise SystemExit(
