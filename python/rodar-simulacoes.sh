@@ -30,36 +30,36 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 CONFIG="${CONFIG:-../motors/bldc/a2212.txt}"
-SAIDA="${SAIDA:-test/simulacoes}"
+SAIDA="${SAIDA:-test/simulacoes/carga}"
 GRAF_FLAGS="${GRAF_FLAGS:---fundo}"   # flags do grafico (ex.: "--fundo -i 2 -f 5")
 EXTRA="${EXTRA:-}"
 MOSTRAR="${MOSTRAR:-0}"               # 1 abre as janelas dos graficos
 
 # Um conjunto de ganhos por simulacao (flags do main.py)
 GANHOS=(
-    "--KpOmega 30 --KiOmega 30 --KdOmega 2"
-    "--KpOmega 10 --KiOmega 20 --KdOmega 1"
-    "--KpOmega 5 --KiOmega 10  --KdOmega 0"
+    "--KpOmega 15 --KiOmega 10 --KdOmega 0 --Ttl 7 --Tlnew 0.1"
+    "--KpOmega 15 --KiOmega 10 --KdOmega 0 --Ttl 7 --Tlnew 0.1"
+    "--KpOmega 15 --KiOmega 10 --KdOmega 0 --Ttl 7 --Tlnew 0.1"
 )
 
 # Tempo final [s] de cada simulacao (--Tf do main.py), na mesma ordem de GANHOS
 TFS=(
-    9.5
-    9.5
-    9.5
+    10
+    10
+    10
 )
 
 # Nome do csv e do grafico (pdf) de cada simulacao, sem extensao e sem o rpm
 # (o script acrescenta "-<rpm>.csv" e "-<rpm>.pdf"), na mesma ordem de GANHOS
 NOMES_CSV=(
-    simulacao-mf-1
-    simulacao-mf-2
-    simulacao-mf-3
+    simulacao-mf-tl
+    simulacao-mf-tl
+    simulacao-mf-tl
 )
 NOMES_IMG=(
-    grafico-mf-1
-    grafico-mf-2
-    grafico-mf-3
+    grafico-mf-tl
+    grafico-mf-tl
+    grafico-mf-tl
 )
 
 # Cada lista precisa de um item por simulacao (o mesmo tamanho de GANHOS)

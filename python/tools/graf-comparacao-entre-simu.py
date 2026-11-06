@@ -2,14 +2,18 @@
 Compara 2 ou mais simulacoes do BLDC (ate 8; ex.: 3) em uma unica figura
 (2 linhas, 1 coluna):
 
-    linha 1: RPM de cada simulacao e uma unica linha de referencia: a rampa
-             depois da troca malha aberta -> fechada (coluna omega_cmd) e,
-             em seguida, o valor final de RPM
+    linha 1: RPM de cada simulacao e a referencia: a rampa depois da troca
+             malha aberta -> fechada (coluna omega_cmd) ate o maior RPM final
+             e, em seguida, esse valor; se as simulacoes tiverem RPM finais
+             diferentes, cada um dos outros vira uma linha horizontal (na cor
+             da simulacao) a partir de onde a rampa passa por ele
     linha 2: corrente de uma das fases (--fase, padrao a) de cada simulacao
 
-A referencia vem da primeira simulacao: o RPM final e o numero contido no
-nome do csv (ex.: simulacao-1150.csv -> 1150 RPM). Sem as colunas vf e
-omega_cmd, desenha so a linha horizontal do RPM final.
+O RPM final de cada simulacao e o numero contido no nome do csv (ex.:
+simulacao-1150.csv -> 1150 RPM). A rampa vem da simulacao com o maior RPM
+final. Sem as colunas vf e omega_cmd, desenha so as linhas horizontais dos
+RPM finais. Com --sem-ref, nao desenha nenhuma referencia (nem a rampa nem
+as linhas dos RPM finais).
 
 O fundo e vermelho claro na malha aberta e verde claro na malha fechada. A
 troca e o fim da rampa V/f lido da coluna vf da primeira simulacao, ou o
@@ -23,7 +27,7 @@ As labels (nomes das simulacoes, legendas e rotulos dos eixos) ficam em
 variaveis no inicio do arquivo (NOMES_SIMULACOES, LABEL_*), para modificar.
 
 Uso:
-    python graf-comparacao-entre-simu.py <sim1.csv> <sim2.csv> [<sim3.csv> ...] <saida.pdf> [--fase {a,b,c}] [-i T] [-f T] [--fundo T] [--nomes N1 N2 ...]
+    python graf-comparacao-entre-simu.py <sim1.csv> <sim2.csv> [<sim3.csv> ...] <saida.pdf> [--fase {a,b,c}] [-i T] [-f T] [--fundo T] [--sem-ref] [--nomes N1 N2 ...]
 
     ex.: python graf-comparacao-entre-simu.py simulacao-mf-1-900.csv simulacao-mf-2-900.csv simulacao-mf-3-900.csv img/comp-mf-900.pdf --nomes "Sim 1" "Sim 2" "Sim 3"
 """
@@ -81,9 +85,9 @@ CORES = ("k", "C0", "C1", "C2", "C4", "C5", "C6", "C9")
 # --nomes ou, sem ele, o nome do csv. O --nomes tem prioridade sobre esta lista.
 # Exemplo, para 3 simulacoes:
 #   NOMES_SIMULACOES = ["PI", "PID", "$K_p = 20$"]
-NOMES_SIMULACOES = ["$k_p=30,k_i=20,k_d=1$",
-                    "$k_p=15,k_i=10,k_d=0.5$", 
-                    "$k_p=5,k_i=5,k_d=0$"]
+NOMES_SIMULACOES = ["900",
+                    "1150", 
+                    "1700"]
 
 # Legenda de cada curva de RPM; {nome} e o nome da simulacao.
 # Exemplos (simulacao "PI"):
@@ -228,19 +232,42 @@ def carregar_simulacao(arquivo, fase):
     return df
 
 
+def _inicio_na_rampa(rpm, referencia, t_padrao):
+    """
+    Instante em que a rampa de referencia passa por `rpm` (onde comeca a
+    linha horizontal desse RPM final). Sem rampa, ou com `rpm` abaixo do
+    inicio dela, retorna o inicio da rampa ou t_padrao.
+    """
+    if referencia is None:
+        return t_padrao
+    tempos, valores = referencia
+    if valores[1] <= valores[0]:
+        return tempos[0]
+    return float(np.interp(rpm, valores[:2], tempos[:2]))
+
+
 def plot_comparacao_simulacoes(sim_csvs, saida, fase="a", t_inicial=None,
-                               t_final=None, fundo=None, nomes=None):
+                               t_final=None, fundo=None, nomes=None,
+                               referencias=True):
     # Nomes na legenda: --nomes, senao NOMES_SIMULACOES, senao o nome do csv
     if nomes is None:
         nomes = NOMES_SIMULACOES or [_latex(os.path.splitext(os.path.basename(a))[0])
                                      for a in sim_csvs]
     sims = [carregar_simulacao(a, fase) for a in sim_csvs]
-    rpm_alvo = _rpm_alvo(sim_csvs[0])
 
-    for arq in sim_csvs[1:]:
-        if _rpm_alvo(arq) != rpm_alvo:
-            print(f"aviso: RPM final de {os.path.basename(arq)} ({_rpm_alvo(arq)}) diferente "
-                  f"do da primeira simulacao ({rpm_alvo}); a referencia usa o da primeira")
+    # RPM final de cada simulacao; a rampa vai ate o maior e vem da primeira
+    # simulacao que tem esse RPM final
+    rpm_alvos = [_rpm_alvo(a) for a in sim_csvs]
+    conhecidos = [r for r in rpm_alvos if r is not None]
+    rpm_alvo = max(conhecidos) if conhecidos else None
+    k_ref = rpm_alvos.index(rpm_alvo) if rpm_alvo is not None else 0
+
+    # Outros RPM finais (diferentes do maior), na cor da primeira simulacao
+    # que usa cada um
+    outras = []
+    for r, cor in zip(rpm_alvos, CORES):
+        if r is not None and r != rpm_alvo and r not in [o[0] for o in outras]:
+            outras.append((r, cor))
 
     # Troca malha aberta -> fechada e linha de referencia, antes do corte
     # (podem ficar fora de [t_inicial, t_final])
@@ -251,7 +278,7 @@ def plot_comparacao_simulacoes(sim_csvs, saida, fase="a", t_inicial=None,
             if t_lim_k is not None and abs(t_lim - t_lim_k) > 1e-3:
                 print(f"aviso: a troca de {os.path.basename(arq)} acontece em {t_lim_k:.4f} s "
                       f"e a da primeira em {t_lim:.4f} s; o fundo usa a da primeira")
-    referencia = _linha_referencia(sims[0], rpm_alvo)
+    referencia = _linha_referencia(sims[k_ref], rpm_alvo)
 
     sims = [_cortar(s, "time", t_inicial, t_final) for s in sims]
     t_ini = min(s["time"].min() for s in sims)
@@ -259,21 +286,28 @@ def plot_comparacao_simulacoes(sim_csvs, saida, fase="a", t_inicial=None,
 
     fig, (ax_rpm, ax_i) = plt.subplots(2, 1, figsize=FIGSIZE, sharex=True)
 
-    # Linha 1: RPM de cada simulacao e a linha unica de referencia
+    # Linha 1: RPM de cada simulacao, a rampa ate o maior RPM final e as
+    # referencias dos outros RPM finais (nenhuma referencia com --sem-ref)
     for sim, nome, cor in zip(sims, nomes, CORES):
         ax_rpm.plot(sim["time"], sim["rpm"], color=cor, lw=1,
                     label=_preencher(LABEL_RPM, nome=nome))
-    label_ref = _preencher(LABEL_REFERENCIA, rpm=rpm_alvo)
-    if referencia is not None:
-        trecho = _recortar_linha(*referencia, t_ini, t_fim)
-        if trecho is not None:
-            ax_rpm.plot(*trecho, color="C3", lw=1.5, ls="--", label=label_ref)
-    elif rpm_alvo is not None:
-        print("aviso: csv sem as colunas vf/omega_cmd ou sem troca; "
-              "desenhada so a linha do RPM final")
-        ax_rpm.axhline(rpm_alvo, color="C3", lw=1.5, ls="--", label=label_ref)
-    else:
-        print("aviso: nome do arquivo sem numero e sem rampa; referencia de RPM nao desenhada")
+    if referencias:
+        label_ref = _preencher(LABEL_REFERENCIA, rpm=rpm_alvo)
+        if referencia is not None:
+            trecho = _recortar_linha(*referencia, t_ini, t_fim)
+            if trecho is not None:
+                ax_rpm.plot(*trecho, color="C3", lw=1.5, ls="--", label=label_ref)
+        elif rpm_alvo is not None:
+            print("aviso: csv sem as colunas vf/omega_cmd ou sem troca; "
+                  "desenhadas so as linhas dos RPM finais")
+            ax_rpm.axhline(rpm_alvo, color="C3", lw=1.5, ls="--", label=label_ref)
+        else:
+            print("aviso: nome do arquivo sem numero e sem rampa; referencia de RPM nao desenhada")
+        for rpm, cor in outras:
+            t_a = max(_inicio_na_rampa(rpm, referencia, t_ini), t_ini)
+            if t_a < t_fim:
+                ax_rpm.plot([t_a, t_fim], [rpm, rpm], color=cor, lw=1.5, ls=":",
+                            label=_preencher(LABEL_REFERENCIA, rpm=rpm))
     ax_rpm.set_ylabel(LABEL_Y_RPM)
     ax_rpm.grid()
     ax_rpm.legend(loc="lower right")
@@ -309,8 +343,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("simulacoes", nargs="+", metavar="simulacao",
-                        help="csv de cada simulacao, 2 ou mais (a primeira define a "
-                             "referencia e o fundo)")
+                        help="csv de cada simulacao, 2 ou mais (a primeira define o "
+                             "fundo; a de maior RPM final, a rampa)")
     parser.add_argument("saida", help="arquivo pdf a ser salvo (inclui o diretorio)")
     parser.add_argument("--fase", choices="abc", default="a",
                         help="fase da corrente desenhada (padrao: a)")
@@ -321,6 +355,9 @@ if __name__ == "__main__":
     parser.add_argument("--fundo", type=float, metavar="T",
                         help="instante [s] da troca malha aberta -> fechada no fundo "
                              "(padrao: fim da rampa V/f da primeira simulacao)")
+    parser.add_argument("--sem-ref", action="store_true",
+                        help="nao desenha nenhuma referencia de RPM (nem a rampa nem "
+                             "as linhas dos RPM finais)")
     parser.add_argument("--nomes", nargs="+", metavar="N",
                         help="nomes das simulacoes na legenda, um por csv e na mesma "
                              "ordem (padrao: nome do csv)")
@@ -346,4 +383,5 @@ if __name__ == "__main__":
             parser.error(f'arquivo "{arq}" nao encontrado')
 
     plot_comparacao_simulacoes(args.simulacoes, args.saida, args.fase,
-                               args.t_inicial, args.t_final, args.fundo, args.nomes)
+                               args.t_inicial, args.t_final, args.fundo, args.nomes,
+                               not args.sem_ref)
