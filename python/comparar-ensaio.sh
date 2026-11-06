@@ -28,23 +28,23 @@ set -euo pipefail
 # Caminhos relativos a partir de python/, onde fica o tools/
 cd "$(dirname "$0")"
 
-GRAF_FLAGS="${GRAF_FLAGS:-}"   # flags dos graficos (ex.: "--fase a")
-MOSTRAR="${MOSTRAR:-0}"        # 1 abre a janela de cada grafico
+GRAF_FLAGS="${GRAF_FLAGS:--i 0 -f 8.5}"   # flags dos graficos (ex.: "--fase a")
+MOSTRAR="${MOSTRAR:-1}"        # 1 abre a janela de cada grafico
 
 # ---------------- Comparacao 1 ----------------
-ENSAIO1="test/stm32/teste01/log-1700.csv"
-SIMULACAO1="test/stm32/teste01/simulation-1700.csv"
-IMAGEM1="test/stm32/teste01/comparacao-1700.pdf"
+ENSAIO1="test/stm32/backup/log-900.csv"
+SIMULACAO1="test/simulacoes/simulacao-mf-900.csv"
+IMAGEM1="img/comparacao-900.pdf"
 
 # ---------------- Comparacao 2 ----------------
-ENSAIO2="test/stm32/teste02/log-1150.csv"
-SIMULACAO2="test/stm32/teste02/simulation-1150.csv"
-IMAGEM2="test/stm32/teste02/comparacao-1150.pdf"
+ENSAIO2="test/stm32/backup/log-1150.csv"
+SIMULACAO2="test/simulacoes/simulacao-mf-1150.csv"
+IMAGEM2="img/comparacao-1150.pdf"
 
 # ---------------- Comparacao 3 ----------------
-ENSAIO3="test/stm32/teste03/log-900.csv"
-SIMULACAO3="test/stm32/teste03/simulation-900.csv"
-IMAGEM3="test/stm32/teste03/comparacao-900.pdf"
+ENSAIO3="test/stm32/backup/log-1700.csv"
+SIMULACAO3="test/simulacoes/simulacao-mf-1700.csv"
+IMAGEM3="img/comparacao-1700.pdf"
 
 ENSAIOS=("$ENSAIO1" "$ENSAIO2" "$ENSAIO3")
 SIMULACOES=("$SIMULACAO1" "$SIMULACAO2" "$SIMULACAO3")
