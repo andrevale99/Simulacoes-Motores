@@ -37,9 +37,9 @@ MOSTRAR="${MOSTRAR:-0}"               # 1 abre as janelas dos graficos
 
 # Um conjunto de ganhos por simulacao (flags do main.py)
 GANHOS=(
-    "--KpOmega 15 --KiOmega 10 --KdOmega 0 --Ttl 7 --Tlnew 0.1"
-    "--KpOmega 15 --KiOmega 10 --KdOmega 0 --Ttl 7 --Tlnew 0.1"
-    "--KpOmega 15 --KiOmega 10 --KdOmega 0 --Ttl 7 --Tlnew 0.1"
+    "--KpOmega 15 --KiOmega 10 --KdOmega 0 --Ttl 7 --Tlnew 0.04"
+    "--KpOmega 15 --KiOmega 10 --KdOmega 0 --Ttl 7 --Tlnew 0.04"
+    "--KpOmega 15 --KiOmega 10 --KdOmega 0 --Ttl 7 --Tlnew 0.04"
 )
 
 # Tempo final [s] de cada simulacao (--Tf do main.py), na mesma ordem de GANHOS
