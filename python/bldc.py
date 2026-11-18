@@ -1,7 +1,7 @@
 import math
 from dataclasses import dataclass, field
 from auxs import rads_to_rpm, rpm_to_rads, TWO_PI
-from inverter import inverter_pole_voltages, inverter_open_leg_clamp
+from inverter import inverter_phase_voltages, inverter_diode_blocking
 
 PHI_A = 0.0
 PHI_B = -2*math.pi/3
@@ -76,20 +76,18 @@ def bldc_step_switched(gates, inverter, motor, time, Tl, trapezoidal_back_emf_fl
     Diferente de bldc_step(), que recebe as tensoes de fase prontas (as tres
     pernas sempre comandadas por chave), aqui:
 
-      * a tensao de polo de cada perna vem das chaves e dos diodos
-        (inverter_pole_voltages);
-      * o neutro do motor flutua e a lei das correntes (ia + ib + ic = 0) e
-        respeitada;
-      * uma fase com as duas chaves desligadas e corrente zero fica ABERTA
-        (corrente zero, sem tensao imposta). Se a FCEM levar o polo dela para
-        fora de [0, Vdc], o diodo correspondente passa a conduzir;
-      * a roda livre na comutacao e o fim da conducao (corrente chegando a
-        zero) acontecem naturalmente.
+      * o inversor (inverter_phase_voltages) resolve as chaves, os diodos e o
+        neutro flutuante, e devolve a tensao v_k de cada fase em relacao ao
+        neutro (None para uma fase aberta). Uma fase com as duas chaves
+        desligadas e corrente zero fica ABERTA; se a FCEM levar o polo dela
+        para fora de [0, Vdc], o diodo correspondente passa a conduzir;
+      * o motor integra so as correntes das fases que conduzem:
 
-    Para o conjunto C de pernas que conduzem, com u_k = polo_k - R*i_k - e_k:
+            di_k/dt = (v_k - R*i_k - e_k) / (L - M)    (soma das di_k = 0)
 
-        vn      = media de u_k em C            (tensao do neutro)
-        di_k/dt = (u_k - vn) / (L - M)        (soma das di_k = 0)
+      * o inversor aplica o bloqueio dos diodos sobre as correntes novas
+        (inverter_diode_blocking): a roda livre na comutacao e o fim da
+        conducao (corrente chegando a zero) acontecem naturalmente.
 
     Integracao: Euler explicito. Todas as derivadas (correntes, velocidade
     e posicao) sao avaliadas com o estado do inicio do passo (instante k).
@@ -128,57 +126,26 @@ def bldc_step_switched(gates, inverter, motor, time, Tl, trapezoidal_back_emf_fl
     Te = motor.Kt * sum(iabc[k]*fabc[k] for k in range(3))
     domega_r = (Te - Tl - motor.omega_r*motor.B) / motor.J
 
-    # --- 1) tensao de polo de cada perna (chaves e diodos) ---
-    poles, diode = inverter_pole_voltages(inverter, gates, iabc)
+    # --- 1) tensao do inversor em cada fase (None = fase aberta) ---
+    vabc, diode = inverter_phase_voltages(inverter, gates, iabc, eabc, R)
 
-    # --- 2) tensao do neutro e pernas abertas forcadas pelos diodos ---
-    cond = [k for k in range(3) if poles[k] is not None]
-    vn = None
-    if cond:
-        vn = sum(poles[k] - R*iabc[k] - eabc[k] for k in cond) / len(cond)
-
-        forcou = False
-        for k in range(3):
-            if poles[k] is None:
-                poles[k], diode[k] = inverter_open_leg_clamp(inverter, vn + eabc[k])
-                if poles[k] is not None:
-                    forcou = True
-
-        if forcou:
-            cond = [k for k in range(3) if poles[k] is not None]
-            vn = sum(poles[k] - R*iabc[k] - eabc[k] for k in cond) / len(cond)
-
-    # --- 3) dinamica das correntes das pernas que conduzem ---
+    # --- 2) dinamica das correntes das fases que conduzem ---
+    cond = [k for k in range(3) if vabc[k] is not None]
     if len(cond) >= 2:
         for k in cond:
-            iabc[k] += (poles[k] - R*iabc[k] - eabc[k] - vn) / leff * dt
+            iabc[k] += (vabc[k] - R*iabc[k] - eabc[k]) / leff * dt
     else:
-        # com menos de duas pernas conectadas nao ha caminho para a corrente
+        # com menos de duas fases conectadas nao ha caminho para a corrente
         iabc[0] = iabc[1] = iabc[2] = 0.0
 
-    # --- 4) um diodo so conduz no seu sentido: corrente que cruza zero ---
-    zerou = False
-    for k in range(3):
-        if (diode[k] < 0 and iabc[k] < 0.0) or (diode[k] > 0 and iabc[k] > 0.0):
-            iabc[k] = 0.0
-            zerou = True
+    # --- 3) bloqueio dos diodos sobre as correntes novas ---
+    iabc[:] = inverter_diode_blocking(diode, iabc)
 
-    # --- 5) restabelece ia + ib + ic = 0 depois de uma perna zerar ---
-    if zerou:
-        vivas = [k for k in range(3) if iabc[k] != 0.0]
-        if len(vivas) == 2:
-            a, c = vivas
-            metade = 0.5 * (iabc[a] - iabc[c])
-            iabc[a], iabc[c] = metade, -metade
-        elif len(vivas) < 2:
-            iabc[0] = iabc[1] = iabc[2] = 0.0
-
-    # --- 6) dinamica mecanica (Euler explicito: posicao com a velocidade
+    # --- 4) dinamica mecanica (Euler explicito: posicao com a velocidade
     #        do instante k, velocidade com o torque do instante k) ---
     motor.Te = Te
     motor.theta_r += motor.omega_r * dt
     motor.omega_r += domega_r * dt
 
-    if vn is None:
-        return list(eabc)
-    return [(poles[k] - vn) if poles[k] is not None else eabc[k] for k in range(3)]
+    # Fase aberta: a tensao no terminal e a propria FCEM
+    return [vabc[k] if vabc[k] is not None else eabc[k] for k in range(3)]

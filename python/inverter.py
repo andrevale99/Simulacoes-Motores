@@ -315,6 +315,89 @@ def inverter_open_leg_clamp(inverter, v_open):
     return None, 0
 
 
+def inverter_phase_voltages(inverter, gates, iabc, eabc, R):
+    """
+    Tensao que o inversor aplica em cada fase de um motor em estrela com
+    neutro isolado, a partir das chaves e dos diodos de roda livre.
+
+      1) tensao de polo de cada perna (inverter_pole_voltages);
+      2) tensao do neutro: com o conjunto C de pernas que conduzem e
+         u_k = polo_k - R*i_k - e_k, vn = media de u_k em C, o que garante
+         ia + ib + ic = 0. Uma perna aberta passa a conduzir por diodo se a
+         FCEM levar o polo dela (vn + e_k) para fora de [0, Vdc]
+         (inverter_open_leg_clamp); nesse caso vn e recalculado.
+
+    Parametros
+    ----------
+    gates : (ga, gb, gc), com +1 (chave superior), -1 (inferior) ou 0 (ambas
+            desligadas), como em six_step_gates().
+    iabc, eabc : correntes e FCEMs das fases no instante atual.
+    R : resistencia de fase do motor.
+
+    Retorna (vabc, diode):
+      vabc[k]  : tensao da fase k em relacao ao neutro do motor (polo_k - vn)
+                 se a perna conduz, ou None se a perna esta aberta
+      diode[k] : diodo que conduz na perna k (como em inverter_pole_voltages),
+                 para inverter_diode_blocking() depois da integracao
+    """
+    poles, diode = inverter_pole_voltages(inverter, gates, iabc)
+
+    cond = [k for k in range(3) if poles[k] is not None]
+    if not cond:
+        return [None, None, None], diode
+
+    vn = sum(poles[k] - R*iabc[k] - eabc[k] for k in cond) / len(cond)
+
+    forcou = False
+    for k in range(3):
+        if poles[k] is None:
+            poles[k], diode[k] = inverter_open_leg_clamp(inverter, vn + eabc[k])
+            if poles[k] is not None:
+                forcou = True
+
+    if forcou:
+        cond = [k for k in range(3) if poles[k] is not None]
+        vn = sum(poles[k] - R*iabc[k] - eabc[k] for k in cond) / len(cond)
+
+    vabc = [(poles[k] - vn) if poles[k] is not None else None for k in range(3)]
+    return vabc, diode
+
+
+def inverter_diode_blocking(diode, iabc):
+    """
+    Bloqueio dos diodos depois da integracao das correntes: um diodo so
+    conduz no seu sentido, entao a corrente de uma perna que conduzia por
+    diodo e cruzou zero vai a zero (a fase abre). Se restarem duas correntes,
+    elas sao ajustadas para valores iguais e opostos (ia + ib + ic = 0); com
+    menos de duas, todas vao a zero.
+
+    Parametros
+    ----------
+    diode : diodo de cada perna, como retornado por inverter_phase_voltages().
+    iabc  : correntes das fases depois da integracao do passo.
+
+    Retorna a lista [ia, ib, ic] corrigida.
+    """
+    iabc = list(iabc)
+
+    zerou = False
+    for k in range(3):
+        if (diode[k] < 0 and iabc[k] < 0.0) or (diode[k] > 0 and iabc[k] > 0.0):
+            iabc[k] = 0.0
+            zerou = True
+
+    if zerou:
+        vivas = [k for k in range(3) if iabc[k] != 0.0]
+        if len(vivas) == 2:
+            a, c = vivas
+            metade = 0.5 * (iabc[a] - iabc[c])
+            iabc[a], iabc[c] = metade, -metade
+        elif len(vivas) < 2:
+            iabc = [0.0, 0.0, 0.0]
+
+    return iabc
+
+
 # ----------------------------------------------------------------------
 #   AUTOTESTE (roda so quando o arquivo e executado diretamente)
 # ----------------------------------------------------------------------
