@@ -243,7 +243,7 @@ def simulation_bldc_malha_corrente_velocidade(args):
     return 0
 
 
-def simulation_bldc_velocidade(args):
+def simulation_bldc_velocidade(args, modelo_medio=False):
     """
     Controle de velocidade do motor BLDC com comutacao six-step.
 
@@ -263,6 +263,15 @@ def simulation_bldc_velocidade(args):
     pu e o maior rpm da referencia. Na troca V/f -> PI, a referencia sai da
     velocidade medida e vai em rampa (VF_RAMP_RPM_PER_S) ate o valor do vetor
     naquele instante; dai em diante segue os degraus do vetor.
+
+    Inversor:
+      * modelo_medio=False: perna a perna (chaves + diodos, bldc_step_switched),
+        com o PWM H_PWM-L_ON resolvido a cada passo pela portadora;
+      * modelo_medio=True: modelo medio (inverter_output_voltage + bldc_step),
+        com os duty cycles de six_step_duties() (fase alta 0.5 + d/2, baixa
+        0.5 - d/2, flutuante 0.5). A tensao de linha media e a mesma (d*Vdc),
+        mas sem o ripple do PWM e com a fase "flutuante" ligada ao ponto
+        medio do barramento (ela conduz, em vez de ficar aberta).
     """
 
     motor = BLDCMotor(
@@ -289,7 +298,8 @@ def simulation_bldc_velocidade(args):
     Ts = 1/args.Fsw
     if args.Dt > 0.0:
         dt = args.Dt
-        if dt > Ts/2.0:
+        # No modelo medio nao ha portadora: dt so precisa resolver a dinamica
+        if dt > Ts/2.0 and not modelo_medio:
             print(f"Aviso: Dt={dt:.6e} s e maior que metade do periodo de "
                   f"chaveamento (Ts={Ts:.6e} s).")
     else:
@@ -298,7 +308,8 @@ def simulation_bldc_velocidade(args):
     time_sim = TimeSimulation(t0=0.0, tf=args.Tf, dt=dt)
     total_steps = int((time_sim.tf - time_sim.t0)/dt + 0.5) + 1
 
-    print(f"\nPeriodo de chaveamento (Ts) = {Ts:.9e} s")
+    print(f"\nInversor: {'modelo medio' if modelo_medio else 'chaveado (perna a perna)'}")
+    print(f"Periodo de chaveamento (Ts) = {Ts:.9e} s")
     print(f"Passo de integracao (dt)    = {dt:.9e} s")
     print(f"Total de passos da simulacao ~ {total_steps}\n")
 
@@ -401,12 +412,17 @@ def simulation_bldc_velocidade(args):
             # Setor de comutacao (com o alinhamento da FCEM)
             sector = six_step_sector(motor.theta_e + SIX_STEP_THETA_OFFSET)
 
-        carrier = inverter_carrier(Ts, t)
-        gates = six_step_gates(sector, duty_ref, carrier)
         da, db, dc = six_step_duties(sector, duty_ref)
 
-        # Inversor + motor (fase flutuante aberta, roda livre pelos diodos)
-        Vabc = bldc_step_switched(gates, inverter, motor, time_sim, args.Tl, True)
+        if modelo_medio:
+            # Inversor medio: tensoes de fase pelos duty cycles, sem portadora
+            Vabc = inverter_output_voltage(inverter, da, db, dc)
+            bldc_step(Vabc, motor, time_sim, args.Tl, True)
+        else:
+            # Inversor + motor (fase flutuante aberta, roda livre pelos diodos)
+            carrier = inverter_carrier(Ts, t)
+            gates = six_step_gates(sector, duty_ref, carrier)
+            Vabc = bldc_step_switched(gates, inverter, motor, time_sim, args.Tl, True)
 
         progress_bar_update(pb, t)
 
@@ -431,7 +447,9 @@ def simulation_bldc_velocidade(args):
          pi_omega, t_next_omega, duty_ref, omega_cmd, omega_cmd_rate,
          rampa_troca, vf, log_file, pb)
     if "Vabc" in locals():
-        del k, t, sector, carrier, gates, da, db, dc, Vabc
+        del k, t, sector, da, db, dc, Vabc
+    if "gates" in locals():
+        del carrier, gates
     if "alvo" in locals():
         del alvo
     if "passo" in locals():
@@ -440,6 +458,17 @@ def simulation_bldc_velocidade(args):
     print(f"\n\nSimulacao concluida. Resultados em \"{args.filename}\".\n")
 
     return 0
+
+
+def simulation_bldc_velocidade_medio(args):
+    """
+    Mesmo controle de velocidade six-step de simulation_bldc_velocidade()
+    (PID em pu, partida V/f opcional, vetor de referencia), mas com o
+    MODELO MEDIO do inversor: inverter_output_voltage() com os duty cycles
+    de six_step_duties() e bldc_step(). Sem portadora, o passo de integracao
+    pode ser maior que no modelo chaveado (informe Dt > 0).
+    """
+    return simulation_bldc_velocidade(args, modelo_medio=True)
 
 
 def simulation_bldc_velocidade_vf(args):

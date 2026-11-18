@@ -3,11 +3,11 @@
 Este documento descreve as funções dos módulos [bldc.py](bldc.py) e
 [inverter.py](inverter.py) usadas pela simulação de controle de velocidade
 do BLDC com comutação six-step,
-[`simulation_bldc_velocidade`](simulations.py#L442).
+[`simulation_bldc_velocidade`](simulations.py#L246).
 
 ## Visão geral: um passo da simulação
 
-A cada passo `dt`, o laço principal ([simulations.py:533-588](simulations.py#L533-L588)) faz:
+A cada passo `dt`, o laço principal ([simulations.py:368-438](simulations.py#L368-L438)) faz:
 
 ```
 theta_e = (P * theta_r) mod 2pi                       # posição elétrica do rotor
@@ -28,6 +28,23 @@ Vabc    = bldc_step_switched(gates, inverter, motor, time_sim, Tl, True)
 O `duty_ref` vem do PI de velocidade (malha fechada) ou da rampa V/f
 (partida em malha aberta). Ele é a única grandeza de "controle". O resto é
 a planta: inversor e motor.
+
+### Variante com o modelo médio do inversor
+
+[`simulation_bldc_velocidade_medio`](simulations.py#L463) chama a mesma
+função com `modelo_medio=True`. O controle (PID, V/f, setores) é igual. Só
+muda a planta, que passa a ser:
+
+```
+da, db, dc = six_step_duties(setor, duty_ref)        # alta 0.5+d/2, baixa 0.5-d/2, flutuante 0.5
+Vabc       = inverter_output_voltage(inverter, da, db, dc)   # polo = d*Vdc, sem portadora
+bldc_step(Vabc, motor, time_sim, Tl, True)           # as 3 fases sempre ligadas
+```
+
+A tensão de linha média entre a fase alta e a baixa é a mesma (`duty*Vdc`),
+mas sem o ripple do PWM. Não há diodos nem fase aberta: a fase "flutuante"
+fica no meio do barramento e conduz corrente. Sem portadora, o passo `dt`
+pode ser bem maior (por exemplo, `--dt 1e-5`).
 
 ---
 
@@ -84,38 +101,35 @@ sem fio de neutro). Ela não recebe tensões prontas: as tensões dependem do
 estado das chaves **e** do sentido das correntes, por causa dos diodos de
 roda livre.
 
+A parte elétrica do inversor (chaves, diodos e neutro) fica no `inverter.py`:
+o motor só recebe a tensão de cada fase e integra os seus estados.
+
 Etapas:
 
 1. **Posição e FCEM.** Calcula `theta_e = P*theta_r`, `omega_e = P*omega_r`,
    as funções de forma `f_k` e as FCEMs `e_k = Ke * omega_r * f_k`.
 
-2. **Tensão de polo de cada perna.** Chama
-   [`inverter_pole_voltages()`](#inverter_pole_voltagesinverter-gates-currents):
-   cada perna fica em `Vdc`, em `0` ou aberta (`None`).
+2. **Tensão do inversor em cada fase.** Chama
+   [`inverter_phase_voltages()`](#inverter_phase_voltagesinverter-gates-iabc-eabc-r),
+   que devolve `v_k = polo_k - vn` (tensão da fase em relação ao neutro) para
+   as fases que conduzem e `None` para as abertas, além do estado dos diodos.
 
-3. **Tensão do neutro.** Com o conjunto `C` das pernas que conduzem e
-   `u_k = polo_k - R*i_k - e_k`, faz `vn = média de u_k em C`. Essa escolha
-   garante `ia + ib + ic = 0`. Para cada perna aberta, verifica com
-   [`inverter_open_leg_clamp()`](#inverter_open_leg_clampinverter-v_open)
-   se a tensão que a FCEM imporia no polo (`vn + e_k`) saiu de `[0, Vdc]`.
-   Se saiu, o diodo correspondente passa a conduzir e `vn` é recalculado.
-
-4. **Dinâmica elétrica (Euler).** Para cada perna que conduz:
+3. **Dinâmica elétrica (Euler).** Para cada fase que conduz:
 
    ```
-   di_k/dt = (polo_k - R*i_k - e_k - vn) / (L - M)
+   di_k/dt = (v_k - R*i_k - e_k) / (L - M)
    ```
 
-   Com menos de duas pernas conectadas não há caminho para a corrente, e
+   Com menos de duas fases conectadas não há caminho para a corrente, e
    todas são zeradas.
 
-5. **Bloqueio dos diodos.** Um diodo só conduz num sentido. Se a corrente de
-   uma perna que conduzia por diodo cruzou zero, ela é zerada (a fase abre).
+4. **Bloqueio dos diodos.** Chama
+   [`inverter_diode_blocking()`](#inverter_diode_blockingdiode-iabc) sobre as
+   correntes novas: a corrente de uma perna que conduzia por diodo e cruzou
+   zero vai a zero (a fase abre), e as duas que restam são ajustadas para
+   valores iguais e opostos (`ia + ib + ic = 0`).
 
-6. **Restabelece `ia + ib + ic = 0`.** Se uma corrente foi zerada e restaram
-   duas, elas são ajustadas para valores iguais e opostos.
-
-7. **Dinâmica mecânica (Euler explícito).** O torque e a derivada da
+5. **Dinâmica mecânica (Euler explícito).** O torque e a derivada da
    velocidade são calculados no início do passo, com as correntes e a
    velocidade do instante `k`, antes da atualização das correntes:
 
@@ -127,8 +141,8 @@ Etapas:
    ```
 
 **Retorno:** `Vabc`, as tensões de terminal de cada fase em relação ao
-neutro do motor (`polo_k - vn`). Para uma fase aberta, o valor retornado é
-a própria FCEM. É o que vai para as colunas `Va`, `Vb` e `Vc` do CSV.
+neutro do motor (`v_k = polo_k - vn`). Para uma fase aberta, o valor
+retornado é a própria FCEM. É o que vai para as colunas `Va`, `Vb` e `Vc` do CSV.
 
 O modelo reproduz naturalmente:
 
@@ -212,10 +226,38 @@ perna (roda livre).
 Por dentro, usa `inverter_gate_state(duty, carrier)`, que só faz a
 comparação `1 if duty > carrier else 0`.
 
+### `inverter_phase_voltages(inverter, gates, iabc, eabc, R)`
+
+[inverter.py:318](inverter.py#L318). Chamada por `bldc_step_switched()`.
+Resolve o inversor perna a perna com o motor em estrela e neutro isolado:
+
+1. tensão de polo de cada perna com
+   [`inverter_pole_voltages()`](#inverter_pole_voltagesinverter-gates-currents):
+   `Vdc`, `0` ou aberta (`None`);
+2. tensão do neutro: com o conjunto `C` das pernas que conduzem e
+   `u_k = polo_k - R*i_k - e_k`, faz `vn = média de u_k em C`, o que garante
+   `ia + ib + ic = 0`. Para cada perna aberta, verifica com
+   [`inverter_open_leg_clamp()`](#inverter_open_leg_clampinverter-v_open)
+   se a tensão que a FCEM imporia no polo (`vn + e_k`) saiu de `[0, Vdc]`;
+   se saiu, o diodo correspondente passa a conduzir e `vn` é recalculado.
+
+Retorna `(vabc, diode)`: `vabc[k] = polo_k - vn` para as pernas que conduzem
+e `None` para as abertas, e o estado dos diodos, usado depois por
+`inverter_diode_blocking()`.
+
+### `inverter_diode_blocking(diode, iabc)`
+
+[inverter.py:366](inverter.py#L366). Chamada por `bldc_step_switched()`
+depois da integração das correntes. Um diodo só conduz num sentido: se a
+corrente de uma perna que conduzia por diodo cruzou zero, ela vai a zero (a
+fase abre). Se restarem duas correntes, elas são ajustadas para valores
+iguais e opostos; com menos de duas, todas vão a zero. Retorna as correntes
+corrigidas.
+
 ### `inverter_pole_voltages(inverter, gates, currents)`
 
-[inverter.py:248](inverter.py#L248). Chamada dentro de
-`bldc_step_switched()`. Determina a tensão de polo de cada perna (em relação
+[inverter.py:274](inverter.py#L274). Chamada dentro de
+`inverter_phase_voltages()`. Determina a tensão de polo de cada perna (em relação
 ao negativo do barramento) a partir do comando e do sentido da corrente:
 
 | Comando | Corrente | Polo | Diodo |
@@ -227,13 +269,12 @@ ao negativo do barramento) a partir do comando e do sentido da corrente:
 | `0` | `= 0` | `None` (perna aberta) | `0` |
 
 Retorna `(poles, diode)`. O vetor `diode` é usado depois para detectar o
-bloqueio do diodo quando a corrente cruza zero (etapa 5 de
-`bldc_step_switched()`).
+bloqueio do diodo quando a corrente cruza zero (`inverter_diode_blocking()`).
 
 ### `inverter_open_leg_clamp(inverter, v_open)`
 
-[inverter.py:277](inverter.py#L277). Também é chamada dentro de
-`bldc_step_switched()`. Uma perna aberta só continua aberta enquanto a
+[inverter.py:303](inverter.py#L303). Também é chamada dentro de
+`inverter_phase_voltages()`. Uma perna aberta só continua aberta enquanto a
 tensão que a FCEM impõe no seu polo (`v_open = vn + e_k`) estiver dentro do
 barramento:
 
@@ -246,6 +287,9 @@ barramento:
 ---
 
 ## Funções desses módulos que esta simulação **não** usa
+
+(Com `modelo_medio=True`, ela usa `bldc_step()` e `inverter_output_voltage()`
+no lugar de `bldc_step_switched()` e da portadora; veja acima.)
 
 - `bldc_step()`: recebe as tensões de fase prontas (as três pernas sempre
   comandadas). Não modela diodos nem fase aberta. É usada na simulação FOC
