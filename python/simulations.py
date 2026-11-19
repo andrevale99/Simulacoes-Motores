@@ -482,6 +482,11 @@ def simulation_bldc_velocidade_vf(args):
     u = min(VF_U_OFFSET + VF_U_PER_RPM*rpm, VF_U_MAX), e depois fica nessa
     velocidade com o mesmo u. O setor vem do angulo comandado, sem usar a
     posicao do rotor, e nao ha PI de velocidade.
+
+    Inversor: MODELO MEDIO (inverter_output_voltage + bldc_step), com os duty
+    cycles de six_step_duties() (fase alta 0.5 + u/2, baixa 0.5 - u/2,
+    flutuante 0.5). Sem portadora, o passo de integracao so precisa resolver
+    a dinamica do motor (Dt > 0 pode ser maior que Ts/2).
     """
 
     motor = BLDCMotor(
@@ -495,18 +500,14 @@ def simulation_bldc_velocidade_vf(args):
         return 1
 
     Ts = 1/args.Fsw
-    if args.Dt > 0.0:
-        dt = args.Dt
-        if dt > Ts/2.0:
-            print(f"Aviso: Dt={dt:.6e} s e maior que metade do periodo de "
-                  f"chaveamento (Ts={Ts:.6e} s).")
-    else:
-        dt = Ts / args.PwmSamples
+    # Modelo medio: sem portadora, dt so precisa resolver a dinamica do motor
+    dt = args.Dt if args.Dt > 0.0 else Ts / args.PwmSamples
 
     time_sim = TimeSimulation(t0=0.0, tf=args.Tf, dt=dt)
     total_steps = int((time_sim.tf - time_sim.t0)/dt + 0.5) + 1
 
-    print(f"\nPeriodo de chaveamento (Ts) = {Ts:.9e} s")
+    print("\nInversor: modelo medio")
+    print(f"Periodo de chaveamento (Ts) = {Ts:.9e} s")
     print(f"Passo de integracao (dt)    = {dt:.9e} s")
     print(f"Total de passos da simulacao ~ {total_steps}\n")
 
@@ -563,12 +564,10 @@ def simulation_bldc_velocidade_vf(args):
                   f"({motor.omega_r*60/TWO_PI:.1f} rpm, u = {vf.u:.3f}).\n")
             alvo_avisado = True
 
-        carrier = inverter_carrier(Ts, t)
-        gates = six_step_gates(sector, duty_ref, carrier)
+        # Inversor medio: tensoes de fase pelos duty cycles, sem portadora
         da, db, dc = six_step_duties(sector, duty_ref)
-
-        # Inversor + motor (fase flutuante aberta, roda livre pelos diodos)
-        Vabc = bldc_step_switched(gates, inverter, motor, time_sim, args.Tl, True)
+        Vabc = inverter_output_voltage(inverter, da, db, dc)
+        bldc_step(Vabc, motor, time_sim, args.Tl, True)
 
         progress_bar_update(pb, t)
 
