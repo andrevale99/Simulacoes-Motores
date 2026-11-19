@@ -37,9 +37,9 @@ MOSTRAR="${MOSTRAR:-0}"               # 1 abre as janelas dos graficos
 
 # Um conjunto de ganhos por simulacao (flags do main.py)
 GANHOS=(
-    "--KpOmega 20 --KiOmega 8 --KdOmega 0.001 --Ttl 0 --Tlnew 0.0"
-    "--KpOmega 0.5 --KiOmega 0.1 --KdOmega 0.01 --Ttl 0 --Tlnew 0.0"
-    "--KpOmega 5 --KiOmega 1 --KdOmega 0.00 --Ttl 0 --Tlnew 0.0"
+    "--KpOmega 20 --KiOmega 8 --KdOmega 0.005 --Ttl 0 --Tlnew 0.0"
+    "--KpOmega 10 --KiOmega 5 --KdOmega 0.001 --Ttl 0 --Tlnew 0.0"
+    "--KpOmega 5 --KiOmega 1 --KdOmega 0.01 --Ttl 0 --Tlnew 0.0"
 )
 
 # Tempo final [s] de cada simulacao (--Tf do main.py), na mesma ordem de GANHOS
@@ -52,14 +52,14 @@ TFS=(
 # Nome do csv e do grafico (pdf) de cada simulacao, sem extensao e sem o rpm
 # (o script acrescenta "-<rpm>.csv" e "-<rpm>.pdf"), na mesma ordem de GANHOS
 NOMES_CSV=(
-    simulacao-medio-1
-    simulacao-medio-2
-    simulacao-medio-3
+    simulacao-1
+    simulacao-2
+    simulacao-3
 )
 NOMES_IMG=(
-    grafico-medio-1
-    grafico-medio-2
-    grafico-medio-3
+    grafico-1
+    grafico-2
+    grafico-3
 )
 
 # Cada lista precisa de um item por simulacao (o mesmo tamanho de GANHOS)

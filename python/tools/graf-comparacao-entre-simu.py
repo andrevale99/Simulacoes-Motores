@@ -84,10 +84,10 @@ CORES = ("k", "C0", "C1", "C2", "C4", "C5", "C6", "C9")
 # Nome de cada simulacao na legenda, na ordem dos csv. Vazio ([]) usa o
 # --nomes ou, sem ele, o nome do csv. O --nomes tem prioridade sobre esta lista.
 # Exemplo, para 3 simulacoes:
-#   NOMES_SIMULACOES = ["PI", "PID", "$K_p = 20$"]
-NOMES_SIMULACOES = ["$k_p = 20$, $k_i = 8$,$k_d = 0.001$",
-                    "$k_p = 0.5$, $k_i = 0.1$, $k_d = 0.01$", 
-                    "$k_p = 5$,  $k_i = 1$, $k_d = 0.0$"]
+#   NOMES_SIMULACOES = ["PI", "PID", "$k_p = 20$, $k_i = 8$,$k_d = 0.001$"]
+NOMES_SIMULACOES = ["$k_p = 20$, $k_i = 8$, $k_d = 0.005$",
+                    "$k_p = 10$, $k_i = 5$, $k_d = 0.001$",
+                    "$k_p = 5$, $k_i = 1$, $k_d = 0.01$"]
 
 # Legenda de cada curva de RPM; {nome} e o nome da simulacao.
 # Exemplos (simulacao "PI"):
